@@ -44,8 +44,8 @@
   --ring: #3f7fe0;
 
   /* メモの中の、注目中の数字 */
-  --note-focus: #bcd5f7;
-  --note-focus-ink: #1d3f73;
+  --note-focus: #a8c8f5;
+  --note-focus-ink: #163766;
 
   /* ブロック完成の演出 */
   --celebrate: #ffd257;
@@ -81,8 +81,8 @@
   --selected: #3d5a86;
   --ring: #86b2f3;
 
-  --note-focus: #3d5a86;
-  --note-focus-ink: #e8f0ff;
+  --note-focus: #4a6fa8;
+  --note-focus-ink: #f0f5ff;
 
   --celebrate: #9a7414;
   --celebrate-glow: rgb(255 200 60 / 0.45);
@@ -114,8 +114,8 @@
   --same: #cfe3ea;
   --selected: #bddbe6;
   --ring: #3a88ab;
-  --note-focus: #bddbe6;
-  --note-focus-ink: #1c4a5e;
+  --note-focus: #a9d2e0;
+  --note-focus-ink: #163f50;
 }
 
 :root[data-theme="dark"][data-palette="b"] {
@@ -134,8 +134,8 @@
   --same: #27414a;
   --selected: #2f5664;
   --ring: #7ec3db;
-  --note-focus: #2f5664;
-  --note-focus-ink: #e6f6fb;
+  --note-focus: #3a6b7c;
+  --note-focus-ink: #eefaff;
 }
 
 /* ---- 配色 C：セージ（落ち着いたくすんだ緑） ---- */
@@ -155,8 +155,8 @@
   --same: #c7e6dc;
   --selected: #b3dfd2;
   --ring: #2a9a86;
-  --note-focus: #b3dfd2;
-  --note-focus-ink: #14493f;
+  --note-focus: #9fd6c6;
+  --note-focus-ink: #0f4237;
 }
 
 :root[data-theme="dark"][data-palette="c"] {
@@ -175,8 +175,8 @@
   --same: #25453d;
   --selected: #2d5a4f;
   --ring: #6fd0b6;
-  --note-focus: #2d5a4f;
-  --note-focus-ink: #e3fff7;
+  --note-focus: #357062;
+  --note-focus-ink: #eafff8;
 }
 
 /* ---- 配色 D：インディゴ（やわらかい紫紺） ---- */
@@ -196,8 +196,8 @@
   --same: #d6d4f7;
   --selected: #c9c6f6;
   --ring: #6d68e6;
-  --note-focus: #c9c6f6;
-  --note-focus-ink: #2f2a86;
+  --note-focus: #bab6f4;
+  --note-focus-ink: #27227a;
 }
 
 :root[data-theme="dark"][data-palette="d"] {
@@ -216,8 +216,8 @@
   --same: #3a3769;
   --selected: #4a4690;
   --ring: #a9a6ff;
-  --note-focus: #4a4690;
-  --note-focus-ink: #f1f0ff;
+  --note-focus: #5a55ad;
+  --note-focus-ink: #f3f2ff;
 }
 
 @theme inline {
