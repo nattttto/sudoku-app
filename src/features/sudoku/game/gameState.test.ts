@@ -825,3 +825,44 @@ describe('終盤の自動入力', () => {
     expect(state.status).toBe('solved')
   })
 })
+
+describe('休憩中・クリア後は盤面を動かさない', () => {
+  const base = createGame(PUZZLE)
+  const index = firstEmpty(base)
+  const placed = run(base, { type: 'select', index }, { type: 'input', value: SOLUTION[index] })
+  const hint = findHint(base.grid, base.eliminated)!
+
+  it('休憩中にヒントを適用しても盤面は変わらない（シートが開いたままのとき）', () => {
+    const paused = gameReducer(base, { type: 'togglePause' })
+    expect(gameReducer(paused, { type: 'applyHint', hint })).toBe(paused)
+  })
+
+  it('休憩中は Undo / Redo も効かない（Ctrl+Z は押せてしまうため）', () => {
+    const paused = gameReducer(placed, { type: 'togglePause' })
+    expect(gameReducer(paused, { type: 'undo' })).toBe(paused)
+    const undone = run(placed, { type: 'undo' }, { type: 'togglePause' })
+    expect(gameReducer(undone, { type: 'redo' })).toBe(undone)
+  })
+
+  it('休憩中はメモの一括消去も効かない', () => {
+    const noted = run(base, { type: 'fillAllNotes' }, { type: 'togglePause' })
+    expect(gameReducer(noted, { type: 'clearAllNotes' })).toBe(noted)
+  })
+
+  it('クリア後に Undo しても、クリアは取り消されない', () => {
+    let state = createGame(PUZZLE)
+    for (const i of autoFillTargets(state)) state = gameReducer(state, { type: 'autoFill', index: i })
+    expect(state.status).toBe('solved')
+    expect(gameReducer(state, { type: 'undo' })).toBe(state)
+  })
+
+  it('埋まったマスを指す古いヒントを適用しても、正解は消えない', () => {
+    const target = parseCellId(hint.targetCell!)
+    const filled = run(
+      base,
+      { type: 'select', index: target },
+      { type: 'input', value: SOLUTION[target] },
+    )
+    expect(gameReducer(filled, { type: 'applyHint', hint }).grid[target]).toBe(SOLUTION[target])
+  })
+})

@@ -329,10 +329,11 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
               )}
             </div>
 
+            {/* 休憩中は盤面を隠しているので、ヒントのシートも隠す */}
             <HintPanel
-              hint={hint}
+              hint={state.paused ? null : hint}
               step={hintStep}
-              notice={notice}
+              notice={state.paused ? null : notice}
               onNext={nextHintStep}
               onApply={applyHint}
               onClose={closeHint}

@@ -326,9 +326,12 @@ const eraseAt = (state: GameState, index: number): GameState => {
   return commit(state, { grid, notes, eliminated: emptyMasks() })
 }
 
+/** 盤面全体が操作を受け付けない状況か（休憩中・クリア後） */
+const isFrozen = (state: GameState): boolean => state.status === 'solved' || state.paused
+
 /** 編集を受け付けない状況か */
 const isLocked = (state: GameState, index: number): boolean =>
-  isSettled(state, index) || state.status === 'solved' || state.paused
+  isSettled(state, index) || isFrozen(state)
 
 /**
  * 盤面が変わったあとの後始末。
@@ -427,7 +430,7 @@ const reduce = (state: GameState, action: GameAction): GameState => {
     }
 
     case 'clearAllNotes': {
-      if (state.notes.every((n) => n === 0)) return state
+      if (isFrozen(state) || state.notes.every((n) => n === 0)) return state
       return commit(state, { notes: emptyMasks() })
     }
 
@@ -452,6 +455,9 @@ const reduce = (state: GameState, action: GameAction): GameState => {
     }
 
     case 'undo': {
+      // 休憩中（盤面が隠れている）とクリア後（記録を残し済み）は戻さない。
+      // キーボードの Ctrl+Z はボタンと違って押せてしまうので、ここで止める
+      if (isFrozen(state)) return state
       const previous = state.past.at(-1)
       if (!previous) return state
       return {
@@ -465,6 +471,7 @@ const reduce = (state: GameState, action: GameAction): GameState => {
     }
 
     case 'redo': {
+      if (isFrozen(state)) return state
       const next = state.future[0]
       if (!next) return state
       return {
@@ -505,10 +512,14 @@ const reduce = (state: GameState, action: GameAction): GameState => {
       }
 
     case 'applyHint': {
+      // 休憩中は盤面を隠しているので、ヒントのシートが開いたままでも適用させない
+      if (isFrozen(state)) return state
       const { hint } = action
       if (hint.targetCell && hint.value !== undefined) {
         const index = parseCellId(hint.targetCell)
-        if (index < 0) return state
+        // 古いヒントで埋まったマスを指していたら何もしない
+        // （同じ数字を置くと「消す」扱いになり、正解が消えてしまうため）
+        if (index < 0 || state.grid[index] !== 0) return state
         return { ...inputValue(state, index, hint.value), selected: index }
       }
       if (hint.eliminations.length > 0) {

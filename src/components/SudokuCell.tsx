@@ -92,9 +92,9 @@ function SudokuCellBase(props: CellProps) {
         opacity: props.dimmed ? 0.3 : 1,
         animationDelay:
           props.celebrateDelay !== null ? `${props.celebrateDelay}ms` : undefined,
-        // 選択中は内側の枠で示す。背景を奪わないので重複やヒントと共存できる
+        // 選択中は内側の枠で示す。背景を奪わないので重複やヒントと共存できる。
+        // z-index で手前に出してはいけない（隣のマスの 1px の線が塗りつぶされて消える）
         boxShadow: props.isSelected ? 'inset 0 0 0 3px var(--ring)' : undefined,
-        zIndex: props.isSelected ? 1 : undefined,
       }}
     >
       {/* 受け付けなかったときの赤い光。番号が変わるたびに作り直して、光り直す */}
