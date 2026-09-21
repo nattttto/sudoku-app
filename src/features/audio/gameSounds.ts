@@ -3,22 +3,23 @@
  *
  * 副作用を持たない純粋な関数にしてある（音の選び方をテストで固定するため）。
  *
- * ひとつだけ意図的な判断がある。
- * **間違いの音は「重複したとき」だけ鳴らし、「解答と違う数字」では鳴らさない。**
- * 重複は盤面を見れば分かる情報なので音にしても何も漏れないが、
- * 解答と違うことを即座に音で教えると、数独として成立しなくなるため。
+ * このアプリは答え合わせありなので、置いた数字が不正解ならその場で間違いの音を鳴らす。
+ * 判断は「置いた数字そのもの」の正誤で行う。重複の有無では判断しない
+ * （以前に置いた不正解と重なっただけの正解に、間違いの音を鳴らさないため）。
  */
-import { findConflicts } from '../sudoku/board/board'
 import type { GameAction, GameState } from '../sudoku/game/gameState'
 import type { SoundName } from './sounds'
 
-const filledCount = (grid: readonly number[]): number =>
-  grid.reduce((count, value) => (value !== 0 ? count + 1 : count), 0)
+const solutionAt = (state: GameState, index: number): number =>
+  state.puzzle.solution.charCodeAt(index) - 48
 
-/** 数字が増えたか減ったかで、置いた音と消した音を分ける */
+/** 数字が置かれたなら正誤で、消えたなら消した音で */
 const soundForGridChange = (prev: GameState, next: GameState): SoundName => {
-  if (findConflicts(next.grid).size > findConflicts(prev.grid).size) return 'error'
-  return filledCount(next.grid) > filledCount(prev.grid) ? 'place' : 'erase'
+  const index = next.grid.findIndex((value, i) => value !== prev.grid[i])
+  if (index < 0) return 'select'
+  const value = next.grid[index]
+  if (value === 0) return 'erase'
+  return value === solutionAt(next, index) ? 'place' : 'error'
 }
 
 export const soundForTransition = (
@@ -32,8 +33,14 @@ export const soundForTransition = (
   // クリアは他のどの音よりも優先する
   if (next.status === 'solved' && prev.status !== 'solved') return 'complete'
 
-  // ブロックを埋め切ったら、置いた音の代わりにごほうびの音楽
-  if (next.celebration && next.celebration !== prev.celebration) return 'block'
+  // ブロック・行・列を埋め切ったら、置いた音の代わりにごほうびの音楽。
+  // 2つ以上同時に完成したら、さらに豪華にする
+  if (next.celebration && next.celebration !== prev.celebration) {
+    return next.celebration.units.length >= 2 ? 'combo' : 'block'
+  }
+
+  // 受け付けられなかった操作
+  if (next.rejection && next.rejection !== prev.rejection) return 'deny'
 
   switch (action.type) {
     case 'tapCell':
@@ -43,7 +50,9 @@ export const soundForTransition = (
     case 'redo':
       if (next.grid !== prev.grid) return soundForGridChange(prev, next)
       if (next.notes !== prev.notes) return 'note'
-      if (next.selected !== prev.selected) return 'select'
+      if (next.selected !== prev.selected || next.activeDigit !== prev.activeDigit) {
+        return 'select'
+      }
       return null
 
     case 'applyHint':

@@ -5,14 +5,14 @@
  * 盤面の状態・タイマー・保存・ヒントの段階表示をひとまとめに扱う。
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { CELL_COUNT, findConflicts, parseGrid } from '../board/board'
+import { CELL_COUNT } from '../board/board'
 import { computeCandidateMasks } from '../candidates/candidateEngine'
 import { analyze, findHint } from '../hints/hintEngine'
 import { buildHintView, emptyHintView } from '../hints/hintView'
 import type { Hint } from '../hints/types'
 import { soundForTransition } from '../../audio/gameSounds'
 import { playSound } from '../../audio/sounds'
-import { createGame, gameReducer } from './gameState'
+import { correctCount, createGame, gameReducer, isWrongAt } from './gameState'
 import type { GameAction, GameState } from './gameState'
 import { saveGame } from './storage'
 
@@ -50,23 +50,27 @@ export const useSudokuGame = (initial: GameState) => {
     return masks
   }, [state.grid, state.eliminated])
 
-  const conflicts = useMemo(() => findConflicts(state.grid), [state.grid])
+  /**
+   * 不正解の数字が入っているマス。答え合わせありなので、その場で赤く見せる。
+   * 重複は必ずどこかに不正解を含むので、重複の検出もこれで兼ねる。
+   */
+  const wrongCells = useMemo(() => {
+    const cells = new Set<number>()
+    for (let i = 0; i < CELL_COUNT; i++) {
+      if (isWrongAt(state, i)) cells.add(i)
+    }
+    return cells
+    // state 全体ではなく盤面と問題だけに依存させる（タイマーのたびに作り直さないため）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.grid, state.puzzle])
 
-  /** 数字ごとの残り個数 */
+  /** 数字ごとの残り個数。不正解は数えず「あと何個正しく置けばよいか」を出す */
   const remaining = useMemo(() => {
     const counts: Record<number, number> = {}
-    for (let n = 1; n <= 9; n++) counts[n] = 9
-    for (const value of state.grid) {
-      if (value !== 0) counts[value] -= 1
-    }
+    for (let n = 1; n <= 9; n++) counts[n] = 9 - correctCount(state, n)
     return counts
-  }, [state.grid])
-
-  /** 解答と食い違っている入力があるか */
-  const hasWrongInput = useMemo(() => {
-    const solution = parseGrid(state.puzzle.solution)
-    return state.grid.some((value, i) => value !== 0 && value !== solution[i])
-  }, [state.grid, state.puzzle.solution])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.grid, state.puzzle])
 
   /** この問題を解くのに必要だった定石（クリア画面で振り返る） */
   const requiredTechniques = useMemo(
@@ -156,12 +160,9 @@ export const useSudokuGame = (initial: GameState) => {
       setHintStep((step) => Math.min(step + 1, 2))
       return
     }
-    if (conflicts.size > 0) {
-      setNotice('同じ行・列・ブロックに同じ数字が入っています。まず重複を直してみましょう。')
-      return
-    }
-    if (hasWrongInput) {
-      setNotice('入力した数字のどれかが正解と違うようです。あやしいマスを見直してみましょう。')
+    // 不正解が残っていると推論の前提が崩れるので、先に直してもらう
+    if (wrongCells.size > 0) {
+      setNotice('赤いマスの数字が間違っています。直してからもう一度ヒントを押してください。')
       return
     }
     const found = findHint(state.grid, state.eliminated)
@@ -173,7 +174,7 @@ export const useSudokuGame = (initial: GameState) => {
     setHintStep(0)
     setNotice(null)
     dispatch({ type: 'countHint', technique: found.technique })
-  }, [hint, conflicts.size, hasWrongInput, state.grid, state.eliminated, dispatch])
+  }, [hint, wrongCells.size, state.grid, state.eliminated, dispatch])
 
   const nextHintStep = useCallback(() => setHintStep((step) => Math.min(step + 1, 2)), [])
 
@@ -199,7 +200,7 @@ export const useSudokuGame = (initial: GameState) => {
     state,
     dispatch,
     autoCandidates,
-    conflicts,
+    wrongCells,
     remaining,
     requiredTechniques,
     hint,

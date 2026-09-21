@@ -12,16 +12,16 @@
 import {
   CELL_COUNT,
   PEERS,
-  boxOf,
   canPlace,
   findConflicts,
   isSolved,
   parseCellId,
   parseGrid,
   unitIndices,
+  unitsOf,
 } from '../board/board'
 import { bit, computeCandidateMasks, maskToNumbers } from '../candidates/candidateEngine'
-import type { Grid, Puzzle } from '../board/types'
+import type { Grid, Puzzle, Unit } from '../board/types'
 import type { Hint, TechniqueId } from '../hints/types'
 
 /** 数字として入れるか、候補メモとして入れるか */
@@ -34,15 +34,25 @@ export type DigitSelection = number | 'erase' | null
 export type GameStatus = 'playing' | 'solved'
 
 /**
- * 3×3ブロックを正しく埋め切ったときの演出情報。
+ * ブロック・行・列を正しく埋め切ったときの演出情報。
  * 演出は一瞬で終わるが、状態として持っておくことで
  * reducer を純粋なまま「いま何が起きたか」を画面と効果音に伝えられる。
  */
 export type Celebration = {
-  /** 完成したブロック（0〜8） */
-  block: number
+  /** 今回の一手で完成したユニット（ブロック → 行 → 列 の順） */
+  units: Unit[]
   /** 最後に数字を置いたマス。演出はここから波のように広がる */
   origin: number
+}
+
+/**
+ * 受け付けられなかった操作（ありえないメモなど）。
+ * 黙って無視すると押せていないのか分からないので、マスを揺らして音で知らせる。
+ * id は同じマスで続けて起きても演出をやり直せるよう、毎回増やす。
+ */
+export type Rejection = {
+  index: number
+  id: number
 }
 
 /** Undo / Redo で戻せる範囲の状態 */
@@ -78,8 +88,10 @@ export type GameState = Snapshot & {
   mistakes: number
   /** デイリー数独として遊んでいる場合の日付（YYYY-MM-DD） */
   dailyDate?: string
-  /** 直前にブロックを完成させたときの演出。無ければ null */
+  /** 直前にブロック・行・列を完成させたときの演出。無ければ null */
   celebration: Celebration | null
+  /** 直前に受け付けなかった操作。無ければ null */
+  rejection: Rejection | null
 }
 
 export type GameAction =
@@ -135,12 +147,33 @@ export const createGame = (puzzle: Puzzle, dailyDate?: string): GameState => {
     hintTechniques: {},
     mistakes: 0,
     celebration: null,
+    rejection: null,
   }
 }
 
 /** そのマスの正解の数字 */
-const solutionAt = (state: GameState, index: number): number =>
+export const solutionAt = (state: GameState, index: number): number =>
   state.puzzle.solution.charCodeAt(index) - 48
+
+/**
+ * 入っている数字が不正解のマス。
+ * このアプリは答え合わせありなので、不正解はその場で赤く見せる。
+ */
+export const isWrongAt = (state: GameState, index: number): boolean =>
+  state.grid[index] !== 0 && state.grid[index] !== solutionAt(state, index)
+
+/** その数字を正しく置けた個数 */
+export const correctCount = (state: GameState, n: number): number => {
+  let count = 0
+  for (let i = 0; i < CELL_COUNT; i++) {
+    if (state.grid[i] === n && solutionAt(state, i) === n) count++
+  }
+  return count
+}
+
+/** その数字を9個すべて正しく置き終えたか */
+export const isDigitComplete = (state: GameState, n: number): boolean =>
+  correctCount(state, n) === 9
 
 /** 解答（puzzle.solution）と照らして、その手が間違いか */
 const isWrongMove = (state: GameState, index: number, value: number): boolean =>
@@ -166,9 +199,15 @@ export const isSettled = (state: GameState, index: number): boolean =>
 export const canAddNote = (state: GameState, index: number, value: number): boolean =>
   state.grid[index] === 0 && canPlace(state.grid, index, value)
 
-/** そのブロックが正解どおりにすべて埋まっているか */
-const isBlockComplete = (state: GameState, grid: Grid, block: number): boolean =>
-  unitIndices({ type: 'box', index: block }).every((i) => grid[i] === solutionAt(state, i))
+/** そのユニットが正解どおりにすべて埋まっているか */
+const isUnitComplete = (state: GameState, grid: Grid, unit: Unit): boolean =>
+  unitIndices(unit).every((i) => grid[i] === solutionAt(state, i))
+
+/** そのマスを含むユニットのうち、正解で埋まっているもの（ブロック → 行 → 列） */
+const completedUnitsAt = (state: GameState, grid: Grid, index: number): Unit[] => {
+  const [row, col, box] = unitsOf(index)
+  return [box, row, col].filter((unit) => isUnitComplete(state, grid, unit))
+}
 
 /** 重複しているマスの集合 */
 export const conflictsOf = (state: GameState): Set<number> => findConflicts(state.grid)
@@ -223,19 +262,25 @@ const inputValue = (state: GameState, index: number, value: number): GameState =
     return { ...next, mistakes: state.mistakes + 1 }
   }
 
-  // 正解でブロックが埋まったら演出する。クリアのときはクリアの演出を優先する
-  const block = boxOf(index)
-  if (next.status !== 'solved' && isBlockComplete(state, grid, block)) {
-    return { ...next, celebration: { block, origin: index } }
+  // 正解でブロック・行・列が埋まったら演出する。クリアのときはクリアの演出を優先する
+  if (next.status !== 'solved') {
+    const units = completedUnitsAt(state, grid, index)
+    if (units.length > 0) return { ...next, celebration: { units, origin: index } }
   }
   return next
 }
+
+/** 操作を受け付けなかったことを記録する（画面と音で知らせるため） */
+const reject = (state: GameState, index: number): GameState => ({
+  ...state,
+  rejection: { index, id: (state.rejection?.id ?? 0) + 1 },
+})
 
 const inputNote = (state: GameState, index: number, value: number): GameState => {
   if (state.grid[index] !== 0) return state
   const adding = (state.notes[index] & bit(value)) === 0
   // ありえない候補は書かせない。外すほうはいつでもできる
-  if (adding && !canAddNote(state, index, value)) return state
+  if (adding && !canAddNote(state, index, value)) return reject(state, index)
   const notes = state.notes.slice()
   notes[index] ^= bit(value)
   return commit(state, { notes })
@@ -254,20 +299,49 @@ const eraseAt = (state: GameState, index: number): GameState => {
 const isLocked = (state: GameState, index: number): boolean =>
   isSettled(state, index) || state.status === 'solved' || state.paused
 
+/**
+ * 盤面が変わったあとの後始末。
+ * 数字優先で選んでいた数字を9個とも正しく置き終えたら、選択を外す
+ * （もう置く場所が無いのに選ばれたままだと、次に何を押せばよいか迷うため）。
+ */
 export const gameReducer = (state: GameState, action: GameAction): GameState => {
+  const next = reduce(state, action)
+  if (
+    next.grid !== state.grid &&
+    typeof next.activeDigit === 'number' &&
+    isDigitComplete(next, next.activeDigit)
+  ) {
+    return { ...next, activeDigit: null }
+  }
+  return next
+}
+
+const reduce = (state: GameState, action: GameAction): GameState => {
   switch (action.type) {
     case 'select':
       return { ...state, selected: action.index }
 
     case 'tapCell': {
       const index = action.index
-      // マス優先、または数字を選んでいないときは、選択するだけ
-      if (state.inputStyle === 'cell' || state.activeDigit === null) {
-        return { ...state, selected: index }
-      }
-      if (isLocked(state, index)) return { ...state, selected: index }
+      // マス優先では、選択するだけ
+      if (state.inputStyle === 'cell') return { ...state, selected: index }
 
       const selectedState = { ...state, selected: index }
+      const value = state.grid[index]
+
+      // 数字優先で、数字の入っているマスをタップしたら、その数字を選ぶ。
+      // ただし間違えた数字のマスは、数字を選んでいれば書き直しの対象にする
+      if (
+        value !== 0 &&
+        state.activeDigit !== 'erase' &&
+        (isSettled(state, index) || state.activeDigit === null)
+      ) {
+        return isDigitComplete(state, value)
+          ? selectedState
+          : { ...selectedState, activeDigit: value }
+      }
+
+      if (state.activeDigit === null || isLocked(state, index)) return selectedState
       if (state.activeDigit === 'erase') return eraseAt(selectedState, index)
       return state.mode === 'value'
         ? inputValue(selectedState, index, state.activeDigit)
@@ -294,6 +368,8 @@ export const gameReducer = (state: GameState, action: GameAction): GameState => 
     }
 
     case 'selectDigit':
+      // 置き終えた数字は選べない
+      if (typeof action.digit === 'number' && isDigitComplete(state, action.digit)) return state
       // 同じものをもう一度押したら選択解除
       return {
         ...state,

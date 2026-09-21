@@ -5,18 +5,19 @@
  * どのマスをどう強調するかを組み立てて SudokuCell に渡す。
  */
 import { useMemo } from 'react'
-import { CELL_COUNT, boxOf, colOf, rowOf } from '@/features/sudoku/board/board'
+import { CELL_COUNT, boxOf, colOf, rowOf, unitIndices } from '@/features/sudoku/board/board'
 import { maskToNumbers } from '@/features/sudoku/candidates/candidateEngine'
 import type { HintView } from '@/features/sudoku/hints/hintView'
 import type { GameState } from '@/features/sudoku/game/gameState'
-import { BlockCelebration } from './BlockCelebration'
 import { SudokuCell } from './SudokuCell'
+import { UnitCelebration } from './UnitCelebration'
 
 type Props = {
   state: GameState
   /** 盤面から計算した候補（ヒントで消した分は除外済み） */
   autoCandidates: number[]
-  conflicts: Set<number>
+  /** 不正解の数字が入っているマス。赤く表示する */
+  wrongCells: Set<number>
   hintView: HintView
   /** ヒント表示中か（関係ないマスを薄くする） */
   hintActive: boolean
@@ -29,7 +30,7 @@ const WAVE_STEP_MS = 70
 export function SudokuBoard({
   state,
   autoCandidates,
-  conflicts,
+  wrongCells,
   hintView,
   hintActive,
   onSelect,
@@ -52,6 +53,16 @@ export function SudokuBoard({
       : 0
 
   const celebration = state.celebration
+  const rejection = state.rejection
+
+  /** 完成したユニットに含まれるマス */
+  const celebratedCells = useMemo(() => {
+    const cells = new Set<number>()
+    for (const unit of celebration?.units ?? []) {
+      for (const i of unitIndices(unit)) cells.add(i)
+    }
+    return cells
+  }, [celebration])
 
   const cells = useMemo(() => {
     return Array.from({ length: CELL_COUNT }, (_, index) => {
@@ -73,9 +84,9 @@ export function SudokuBoard({
         related && (rowOf(selected!) === rowOf(index) || colOf(selected!) === colOf(index))
       const isPeerBox = related && !isPeerLine && boxOf(selected!) === boxOf(index)
 
-      // 完成したブロックは、最後に置いたマスからの距離に応じて少しずつ遅らせて光らせる
+      // 完成した行・列・ブロックは、最後に置いたマスからの距離に応じて少しずつ遅らせて光らせる
       const celebrateDelay =
-        celebration && boxOf(index) === celebration.block
+        celebration && celebratedCells.has(index)
           ? Math.max(
               Math.abs(rowOf(index) - rowOf(celebration.origin)),
               Math.abs(colOf(index) - colOf(celebration.origin)),
@@ -86,7 +97,7 @@ export function SudokuBoard({
         index,
         value,
         isGiven: state.givens[index] !== 0,
-        isError: conflicts.has(index),
+        isError: wrongCells.has(index),
         isSelected: selected === index,
         isPeerLine,
         isPeerBox,
@@ -96,9 +107,21 @@ export function SudokuBoard({
         noteCandidates: notes,
         dimmed: hintActive && !hintView.inScope.has(index),
         celebrateDelay,
+        rejectKey: rejection && rejection.index === index ? rejection.id : null,
       }
     })
-  }, [state, autoCandidates, conflicts, selected, focusValue, hintActive, hintView, celebration])
+  }, [
+    state,
+    autoCandidates,
+    wrongCells,
+    selected,
+    focusValue,
+    hintActive,
+    hintView,
+    celebration,
+    celebratedCells,
+    rejection,
+  ])
 
   return (
     <div
@@ -109,11 +132,12 @@ export function SudokuBoard({
         <SudokuCell key={cell.index} {...cell} hintView={hintView} onSelect={onSelect} />
       ))}
       {celebration && (
-        <BlockCelebration
+        <UnitCelebration
           // key は「どの完成か」だけで決める。他の操作のたびに作り直すと演出が再生し直されてしまう。
-          // 同じブロックが再び完成するのは Undo で一度 null を経た後だけなので、これで足りる
-          key={`${celebration.block}-${celebration.origin}`}
-          block={celebration.block}
+          // 同じユニットが再び完成するのは Undo で一度 null を経た後だけなので、これで足りる
+          key={`${celebration.units.map((u) => `${u.type}${u.index}`).join('-')}@${celebration.origin}`}
+          units={celebration.units}
+          origin={celebration.origin}
         />
       )}
     </div>

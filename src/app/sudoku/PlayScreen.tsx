@@ -101,7 +101,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
     state,
     dispatch,
     autoCandidates,
-    conflicts,
+    wrongCells,
     remaining,
     requiredTechniques,
     hint,
@@ -196,7 +196,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
               <SudokuBoard
                 state={state}
                 autoCandidates={autoCandidates}
-                conflicts={conflicts}
+                wrongCells={wrongCells}
                 hintView={hintView}
                 hintActive={hintActive}
                 onSelect={(index) => dispatch({ type: 'tapCell', index })}
@@ -228,8 +228,8 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
             >
               <span>
                 残り {emptyCount} マス・ヒント {state.hintCount} 回・ミス {state.mistakes} 回
-                {conflicts.size > 0 && (
-                  <span style={{ color: 'var(--danger)' }}>・重複 {conflicts.size} マス</span>
+                {wrongCells.size > 0 && (
+                  <span style={{ color: 'var(--danger)' }}>・間違い {wrongCells.size} マス</span>
                 )}
               </span>
               <RestartButton onRestart={restart} />

@@ -116,8 +116,8 @@ export function NumberPad({
           const usedUp = left === 0
           // 同じ行・列・ブロックにすでにある数字はメモできない
           const blocked = !isDigitFirst && mode === 'note' && blockedNotes.has(n)
-          const isDisabled =
-            digitsInert || blocked || (usedUp && !isDigitFirst && mode === 'value')
+          // 9個とも正しく置き終えた数字は、もう置く場所もメモする場所も無い
+          const isDisabled = digitsInert || blocked || usedUp
           return (
             <button
               key={n}

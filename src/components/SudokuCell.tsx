@@ -23,8 +23,10 @@ export type CellProps = {
   isHighlighted: boolean
   /** 注目中の数字。メモの中の同じ数字を強調するのに使う。無ければ 0 */
   focusDigit: number
-  /** ブロック完成の演出を始めるまでの遅れ（ミリ秒）。演出しないなら null */
+  /** 完成の演出を始めるまでの遅れ（ミリ秒）。演出しないなら null */
   celebrateDelay: number | null
+  /** 操作を受け付けなかったときの番号。変わるたびに揺れ直す。無ければ null */
+  rejectKey: number | null
   /** 表示する候補（自動候補 or 手書きメモ） */
   candidates: number[]
   /** 手書きメモの候補（自動候補と区別して表示する） */
@@ -78,7 +80,7 @@ function SudokuCellBase(props: CellProps) {
     <button
       type="button"
       aria-label={`R${row + 1}C${col + 1}${value ? ` = ${value}` : ' 空きマス'}${
-        isError ? '、重複しています' : ''
+        isError ? '、間違っています' : ''
       }`}
       onClick={() => props.onSelect(index)}
       className={`relative flex aspect-square items-center justify-center border-solid transition-colors select-none ${
@@ -95,6 +97,21 @@ function SudokuCellBase(props: CellProps) {
         zIndex: props.isSelected ? 1 : undefined,
       }}
     >
+      {/* 受け付けなかったときの赤い光。番号が変わるたびに作り直して、光り直す */}
+      {props.rejectKey !== null && (
+        <span
+          key={`flash-${props.rejectKey}`}
+          aria-hidden
+          className="cell-reject-flash pointer-events-none absolute inset-0"
+        />
+      )}
+      {/* 中身の入れ物。受け付けなかったときは番号を key にして作り直し、揺れ直させる */}
+      <span
+        key={props.rejectKey ?? 'content'}
+        className={`relative flex h-full w-full items-center justify-center ${
+          props.rejectKey !== null ? 'cell-reject' : ''
+        }`}
+      >
       {value !== 0 ? (
         <span
           className="tabular leading-none"
@@ -142,6 +159,7 @@ function SudokuCellBase(props: CellProps) {
           })}
         </span>
       ) : null}
+      </span>
     </button>
   )
 }

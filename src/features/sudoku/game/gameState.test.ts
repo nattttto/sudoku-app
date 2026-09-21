@@ -6,7 +6,15 @@ import { parseCellId, parseGrid, unitIndices } from '../board/board'
 import { bit, computeCandidates, maskToNumbers } from '../candidates/candidateEngine'
 import { findHint } from '../hints/hintEngine'
 import type { Puzzle } from '../board/types'
-import { canAddNote, createGame, gameReducer, isSettled } from './gameState'
+import {
+  canAddNote,
+  correctCount,
+  createGame,
+  gameReducer,
+  isDigitComplete,
+  isSettled,
+  isWrongAt,
+} from './gameState'
 import type { GameAction, GameState } from './gameState'
 import easyPool from '../../../data/puzzles/easy.json'
 
@@ -319,7 +327,9 @@ describe('ブロック完成', () => {
 
   it('正解で埋め切ると、そのブロックと最後のマスを記録する', () => {
     const done = run(almost, { type: 'select', index: last }, { type: 'input', value: SOLUTION[last] })
-    expect(done.celebration).toEqual({ block, origin: last })
+    expect(done.celebration?.origin).toBe(last)
+    // ブロックが先頭。同時に行・列が揃えばそれも含む
+    expect(done.celebration?.units[0]).toEqual({ type: 'box', index: block })
   })
 
   it('間違えた数字で埋めても演出しない', () => {
@@ -353,7 +363,7 @@ describe('ブロック完成', () => {
       ],
     }
     const done = gameReducer(almost, { type: 'applyHint', hint })
-    expect(done.celebration?.block).toBe(block)
+    expect(done.celebration?.units[0]).toEqual({ type: 'box', index: block })
   })
 
   it('Undo すると演出は消える', () => {
@@ -555,5 +565,181 @@ describe('ヒントの適用', () => {
     }
     // easy の問題では消去型が出ないこともある。その場合はここまで到達してよい
     expect(state.status).toBe('solved')
+  })
+})
+
+describe('答え合わせ', () => {
+  const base = createGame(PUZZLE)
+  const { index, wrong, correct } = flexibleCell(base)
+
+  it('不正解の数字が入ったマスを判定できる', () => {
+    const mistaken = run(base, { type: 'select', index }, { type: 'input', value: wrong })
+    expect(isWrongAt(mistaken, index)).toBe(true)
+    const fixed = gameReducer(mistaken, { type: 'input', value: correct })
+    expect(isWrongAt(fixed, index)).toBe(false)
+  })
+
+  it('問題の初期数字や空きマスは不正解扱いしない', () => {
+    const given = base.grid.findIndex((v) => v !== 0)
+    expect(isWrongAt(base, given)).toBe(false)
+    expect(isWrongAt(base, index)).toBe(false)
+  })
+
+  it('正しく置けた個数には不正解を数えない', () => {
+    const before = correctCount(base, wrong)
+    const mistaken = run(base, { type: 'select', index }, { type: 'input', value: wrong })
+    expect(correctCount(mistaken, wrong)).toBe(before)
+  })
+})
+
+describe('数字優先：盤面の数字をタップして選ぶ', () => {
+  const base = gameReducer(createGame(PUZZLE), { type: 'setInputStyle', style: 'digit' })
+  const given = base.grid.findIndex((v, i) => v !== 0 && !isDigitComplete(base, base.grid[i]))
+  const { index, wrong, correct } = flexibleCell(base)
+
+  it('数字を選んでいないとき、数字のマスをタップするとその数字が選ばれる', () => {
+    const after = gameReducer(base, { type: 'tapCell', index: given })
+    expect(after.activeDigit).toBe(base.grid[given])
+  })
+
+  it('別の数字を選んでいても、確定したマスをタップすればその数字に切り替わる', () => {
+    const other = base.grid[given] === 1 ? 2 : 1
+    const after = run(base, { type: 'selectDigit', digit: other }, { type: 'tapCell', index: given })
+    expect(after.activeDigit).toBe(base.grid[given])
+    expect(after.grid[given]).toBe(base.grid[given])
+  })
+
+  it('間違えたマスは、数字を選んでいれば書き直しになる', () => {
+    const after = run(
+      base,
+      { type: 'selectDigit', digit: wrong },
+      { type: 'tapCell', index },
+      { type: 'selectDigit', digit: correct },
+      { type: 'tapCell', index },
+    )
+    expect(after.grid[index]).toBe(correct)
+  })
+
+  it('消しゴムを選んでいるときは、数字のマスをタップしても数字は選ばない', () => {
+    const after = run(base, { type: 'selectDigit', digit: 'erase' }, { type: 'tapCell', index: given })
+    expect(after.activeDigit).toBe('erase')
+  })
+})
+
+describe('置き終えた数字', () => {
+  const base = gameReducer(createGame(PUZZLE), { type: 'setInputStyle', style: 'digit' })
+  // 残りが一番少ない数字を選ぶ（置き終えるまでの手数を減らすため）
+  const digit = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    .filter((n) => !isDigitComplete(base, n))
+    .sort((a, b) => correctCount(base, b) - correctCount(base, a))[0]
+  const spots = base.grid.flatMap((v, i) => (v === 0 && SOLUTION[i] === digit ? [i] : []))
+
+  /** 数字優先で、その数字を選んだまま、最後の1つを残して置く */
+  const almost = spots
+    .slice(0, -1)
+    .reduce(
+      (state, i) => gameReducer(state, { type: 'tapCell', index: i }),
+      gameReducer(base, { type: 'selectDigit', digit }),
+    )
+
+  it('9個とも正しく置き終えると、数字の選択が自動で外れる', () => {
+    expect(almost.activeDigit).toBe(digit)
+    const done = gameReducer(almost, { type: 'tapCell', index: spots.at(-1)! })
+    expect(isDigitComplete(done, digit)).toBe(true)
+    expect(done.activeDigit).toBeNull()
+  })
+
+  it('置き終えた数字は選べない', () => {
+    const done = gameReducer(almost, { type: 'tapCell', index: spots.at(-1)! })
+    expect(gameReducer(done, { type: 'selectDigit', digit }).activeDigit).toBeNull()
+  })
+
+  it('置き終えた数字のマスをタップしても選ばれない', () => {
+    const done = gameReducer(almost, { type: 'tapCell', index: spots.at(-1)! })
+    expect(gameReducer(done, { type: 'tapCell', index: spots[0] }).activeDigit).toBeNull()
+  })
+})
+
+describe('受け付けない操作', () => {
+  const base = createGame(PUZZLE)
+  const { index, candidates } = flexibleCell(base)
+  const impossible = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => !candidates.includes(n))!
+
+  const tapImpossible = (state: GameState) =>
+    run(
+      state,
+      { type: 'setInputStyle', style: 'digit' },
+      { type: 'setMode', mode: 'note' },
+      { type: 'selectDigit', digit: impossible },
+      { type: 'tapCell', index },
+    )
+
+  it('ありえないメモをタップすると、そのマスを記録する', () => {
+    const after = tapImpossible(base)
+    expect(after.rejection?.index).toBe(index)
+    expect(after.notes[index]).toBe(0)
+  })
+
+  it('続けて起きても、毎回別の番号になる（演出をやり直すため）', () => {
+    const first = tapImpossible(base)
+    const second = gameReducer(first, { type: 'tapCell', index })
+    expect(second.rejection?.id).not.toBe(first.rejection?.id)
+  })
+
+  it('書けるメモでは記録しない', () => {
+    const after = run(
+      base,
+      { type: 'setInputStyle', style: 'digit' },
+      { type: 'setMode', mode: 'note' },
+      { type: 'selectDigit', digit: candidates[0] },
+      { type: 'tapCell', index },
+    )
+    expect(after.rejection).toBeNull()
+  })
+})
+
+describe('行・列の完成', () => {
+  const base = createGame(PUZZLE)
+
+  /** 指定したマス以外の、そのユニットの空きマスを正解で埋める */
+  const fillExcept = (state: GameState, indices: number[], except: number) =>
+    indices
+      .filter((i) => i !== except && state.grid[i] === 0)
+      .reduce(
+        (s, i) => run(s, { type: 'select', index: i }, { type: 'input', value: SOLUTION[i] }),
+        state,
+      )
+
+  it('行を正解で埋め切ると、その行を記録する', () => {
+    const row = [0, 1, 2, 3, 4, 5, 6, 7, 8].find((r) =>
+      unitIndices({ type: 'row', index: r }).some((i) => base.grid[i] === 0),
+    )!
+    const cells = unitIndices({ type: 'row', index: row })
+    const last = cells.filter((i) => base.grid[i] === 0).at(-1)!
+    const almost = fillExcept(base, cells, last)
+    const done = run(almost, { type: 'select', index: last }, { type: 'input', value: SOLUTION[last] })
+    expect(done.celebration?.units).toContainEqual({ type: 'row', index: row })
+  })
+
+  it('列を正解で埋め切ると、その列を記録する', () => {
+    const col = [0, 1, 2, 3, 4, 5, 6, 7, 8].find((c) =>
+      unitIndices({ type: 'col', index: c }).some((i) => base.grid[i] === 0),
+    )!
+    const cells = unitIndices({ type: 'col', index: col })
+    const last = cells.filter((i) => base.grid[i] === 0).at(-1)!
+    const almost = fillExcept(base, cells, last)
+    const done = run(almost, { type: 'select', index: last }, { type: 'input', value: SOLUTION[last] })
+    expect(done.celebration?.units).toContainEqual({ type: 'col', index: col })
+  })
+
+  it('1手でブロックと行が同時に揃えば、両方を記録する（ブロックが先頭）', () => {
+    const target = firstEmpty(base)
+    const box = { type: 'box' as const, index: Math.floor(Math.floor(target / 9) / 3) * 3 + Math.floor((target % 9) / 3) }
+    const row = { type: 'row' as const, index: Math.floor(target / 9) }
+    let state = fillExcept(base, unitIndices(box), target)
+    state = fillExcept(state, unitIndices(row), target)
+    const done = run(state, { type: 'select', index: target }, { type: 'input', value: SOLUTION[target] })
+    expect(done.celebration?.units[0]).toEqual(box)
+    expect(done.celebration?.units).toContainEqual(row)
   })
 })
