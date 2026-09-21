@@ -10,15 +10,38 @@ import { computeCandidateMasks } from '../candidates/candidateEngine'
 import { analyze, findHint } from '../hints/hintEngine'
 import { buildHintView, emptyHintView } from '../hints/hintView'
 import type { Hint } from '../hints/types'
+import { soundForTransition } from '../../audio/gameSounds'
+import { playSound } from '../../audio/sounds'
 import { createGame, gameReducer } from './gameState'
-import type { GameState } from './gameState'
+import type { GameAction, GameState } from './gameState'
 import { saveGame } from './storage'
 
 export const useSudokuGame = (initial: GameState) => {
-  const [state, dispatch] = useReducer(gameReducer, initial)
+  const [state, rawDispatch] = useReducer(gameReducer, initial)
   const [hint, setHint] = useState<Hint | null>(null)
   const [hintStep, setHintStep] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+
+  /**
+   * 効果音は「直前の状態」と「今の状態」を比べて鳴らす。
+   * reducer は純粋なままにしておきたいので、ここで面倒を見る。
+   */
+  const lastActionRef = useRef<GameAction | null>(null)
+  const previousStateRef = useRef<GameState | null>(null)
+
+  const dispatch = useCallback((action: GameAction) => {
+    lastActionRef.current = action
+    rawDispatch(action)
+  }, [])
+
+  useEffect(() => {
+    const previous = previousStateRef.current
+    const action = lastActionRef.current
+    previousStateRef.current = state
+    if (!previous || !action) return
+    const sound = soundForTransition(action, previous, state)
+    if (sound) playSound(sound)
+  }, [state])
 
   /** 盤面から計算した候補（ヒントで消した分を除く） */
   const autoCandidates = useMemo(() => {
@@ -73,7 +96,7 @@ export const useSudokuGame = (initial: GameState) => {
     if (state.status === 'solved' || state.paused) return
     const timer = window.setInterval(() => dispatch({ type: 'tick', deltaMs: 1000 }), 1000)
     return () => window.clearInterval(timer)
-  }, [state.status, state.paused])
+  }, [state.status, state.paused, dispatch])
 
   // 自動保存（続きから用）
   useEffect(() => {
@@ -126,7 +149,7 @@ export const useSudokuGame = (initial: GameState) => {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [state.selected, state.inputStyle])
+  }, [state.selected, state.inputStyle, dispatch])
 
   const requestHint = useCallback(() => {
     if (hint) {
@@ -150,7 +173,7 @@ export const useSudokuGame = (initial: GameState) => {
     setHintStep(0)
     setNotice(null)
     dispatch({ type: 'countHint', technique: found.technique })
-  }, [hint, conflicts.size, hasWrongInput, state.grid, state.eliminated])
+  }, [hint, conflicts.size, hasWrongInput, state.grid, state.eliminated, dispatch])
 
   const nextHintStep = useCallback(() => setHintStep((step) => Math.min(step + 1, 2)), [])
 
@@ -159,7 +182,7 @@ export const useSudokuGame = (initial: GameState) => {
     dispatch({ type: 'applyHint', hint })
     setHint(null)
     setHintStep(0)
-  }, [hint])
+  }, [hint, dispatch])
 
   const closeHint = useCallback(() => {
     setHint(null)
@@ -170,7 +193,7 @@ export const useSudokuGame = (initial: GameState) => {
   const restart = useCallback(() => {
     dispatch({ type: 'restart' })
     closeHint()
-  }, [closeHint])
+  }, [closeHint, dispatch])
 
   return {
     state,

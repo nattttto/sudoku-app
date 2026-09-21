@@ -3,6 +3,7 @@
 /** ホーム画面（仕様書 18.1）。難易度を選んで開始するだけのシンプルな構成。 */
 import Link from 'next/link'
 import { useEffect, useSyncExternalStore } from 'react'
+import { SoundToggle } from '@/components/SoundToggle'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { DIFFICULTIES, DIFFICULTY_LABEL } from '@/features/sudoku/board/types'
 import {
@@ -40,7 +41,8 @@ export default function HomePage() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-8 px-5 py-12">
-      <div className="absolute top-4 right-5">
+      <div className="absolute top-4 right-5 flex gap-2">
+        <SoundToggle />
         <ThemeToggle />
       </div>
 
