@@ -234,6 +234,31 @@ body {
   animation: celebrate-sparkle 0.6s ease-out both;
 }
 
+/* 数字のコンプリートで、その数字の9マスに出る大きな星。きらめきより大きく長く */
+@keyframes celebrate-star {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(-30deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.5) rotate(10deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -80%) scale(1.1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -150%) scale(0.6) rotate(0deg);
+  }
+}
+
+.celebrate-star {
+  opacity: 0;
+  animation: celebrate-star 0.95s ease-out both;
+}
+
 /*
  * 受け付けられない操作（ありえないメモなど）。
  * マスの中身を小さく揺らし、赤くさっと光らせる。
@@ -316,7 +341,8 @@ body {
   }
   .cell-celebrate::after,
   .celebrate-particle,
-  .celebrate-sparkle {
+  .celebrate-sparkle,
+  .celebrate-star {
     animation: none;
     opacity: 0;
   }

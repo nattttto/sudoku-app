@@ -10,13 +10,27 @@ import { computeCandidateMasks } from '../candidates/candidateEngine'
 import { analyze, findHint } from '../hints/hintEngine'
 import { buildHintView, emptyHintView } from '../hints/hintView'
 import type { Hint } from '../hints/types'
-import { soundForTransition } from '../../audio/gameSounds'
+import { placedDigit, soundForTransition } from '../../audio/gameSounds'
 import { playSound } from '../../audio/sounds'
-import { correctCount, createGame, gameReducer, isWrongAt } from './gameState'
+import {
+  autoFillTargets,
+  canAutoFill,
+  correctCount,
+  createGame,
+  gameReducer,
+  isWrongAt,
+} from './gameState'
 import type { GameAction, GameState } from './gameState'
 import { saveGame } from './storage'
 
-export const useSudokuGame = (initial: GameState) => {
+/** 自動入力で1マスずつ埋めていく間隔（ミリ秒）。音が旋律として聞こえる速さにしてある */
+const AUTO_FILL_STEP_MS = 180
+
+export const useSudokuGame = (
+  initial: GameState,
+  options: { autoFillThreshold?: number } = {},
+) => {
+  const { autoFillThreshold = 0 } = options
   const [state, rawDispatch] = useReducer(gameReducer, initial)
   const [hint, setHint] = useState<Hint | null>(null)
   const [hintStep, setHintStep] = useState(0)
@@ -40,7 +54,7 @@ export const useSudokuGame = (initial: GameState) => {
     previousStateRef.current = state
     if (!previous || !action) return
     const sound = soundForTransition(action, previous, state)
-    if (sound) playSound(sound)
+    if (sound) playSound(sound, { digit: placedDigit(previous, state) })
   }, [state])
 
   /** 盤面から計算した候補（ヒントで消した分を除く） */
@@ -191,8 +205,36 @@ export const useSudokuGame = (initial: GameState) => {
     setNotice(null)
   }, [])
 
+  /**
+   * 終盤の自動入力。始めたら、空きマスを左上から一定の間隔で1つずつ埋める。
+   * 一度に埋めずに間を空けるのは、完成の演出と音階の旋律を順に見せるため。
+   * 休憩・クリア・不正解が出たら止める。
+   */
+  const [autoFilling, setAutoFilling] = useState(false)
+  const autoFillAvailable = canAutoFill(state, autoFillThreshold)
+
+  const startAutoFill = useCallback(() => {
+    if (autoFillAvailable) setAutoFilling(true)
+  }, [autoFillAvailable])
+
+  useEffect(() => {
+    if (!autoFilling) return
+    const timer = window.setTimeout(() => {
+      const target = autoFillTargets(state)[0]
+      const stop =
+        target === undefined || state.status === 'solved' || state.paused || wrongCells.size > 0
+      if (stop) {
+        setAutoFilling(false)
+        return
+      }
+      dispatch({ type: 'autoFill', index: target })
+    }, AUTO_FILL_STEP_MS)
+    return () => window.clearTimeout(timer)
+  }, [autoFilling, state, wrongCells.size, dispatch])
+
   const restart = useCallback(() => {
     dispatch({ type: 'restart' })
+    setAutoFilling(false)
     closeHint()
   }, [closeHint, dispatch])
 
@@ -212,6 +254,9 @@ export const useSudokuGame = (initial: GameState) => {
     applyHint,
     closeHint,
     restart,
+    autoFillAvailable,
+    autoFilling,
+    startAutoFill,
   }
 }
 

@@ -43,6 +43,8 @@ export type Celebration = {
   units: Unit[]
   /** 最後に数字を置いたマス。演出はここから波のように広がる */
   origin: number
+  /** 今回の一手で9個すべて正しく置き終えた数字。無ければ null */
+  digit: number | null
 }
 
 /**
@@ -114,6 +116,8 @@ export type GameAction =
   | { type: 'togglePause' }
   | { type: 'applyHint'; hint: Hint }
   | { type: 'countHint'; technique: TechniqueId }
+  /** 終盤の自動入力。選択に関係なく、指定のマスに正解を置く */
+  | { type: 'autoFill'; index: number }
   | { type: 'load'; state: GameState }
 
 const emptyMasks = (): number[] => new Array<number>(CELL_COUNT).fill(0)
@@ -199,6 +203,29 @@ export const isSettled = (state: GameState, index: number): boolean =>
 export const canAddNote = (state: GameState, index: number, value: number): boolean =>
   state.grid[index] === 0 && canPlace(state.grid, index, value)
 
+/** 終盤の自動入力で埋めるマス（空きマス）。盤面の左上から順に並ぶ */
+export const autoFillTargets = (state: GameState): number[] => {
+  const targets: number[] = []
+  for (let i = 0; i < CELL_COUNT; i++) if (state.grid[i] === 0) targets.push(i)
+  return targets
+}
+
+/**
+ * 終盤の自動入力を始められるか。
+ * 空きマスが threshold 以下で、不正解が残っていないときだけ。
+ * 不正解を残したまま埋めると、どこを間違えたかを本人が確かめる機会が無くなるため。
+ * threshold が 0 なら自動入力は使わない設定。
+ */
+export const canAutoFill = (state: GameState, threshold: number): boolean => {
+  if (threshold <= 0 || state.status === 'solved' || state.paused) return false
+  let empty = 0
+  for (let i = 0; i < CELL_COUNT; i++) {
+    if (state.grid[i] === 0) empty++
+    else if (isWrongAt(state, i)) return false
+  }
+  return empty > 0 && empty <= threshold
+}
+
 /** そのユニットが正解どおりにすべて埋まっているか */
 const isUnitComplete = (state: GameState, grid: Grid, unit: Unit): boolean =>
   unitIndices(unit).every((i) => grid[i] === solutionAt(state, i))
@@ -262,10 +289,14 @@ const inputValue = (state: GameState, index: number, value: number): GameState =
     return { ...next, mistakes: state.mistakes + 1 }
   }
 
-  // 正解でブロック・行・列が埋まったら演出する。クリアのときはクリアの演出を優先する
+  // 正解でブロック・行・列が埋まったり、数字を9個とも置き終えたら演出する。
+  // クリアのときはクリアの演出を優先する
   if (next.status !== 'solved') {
     const units = completedUnitsAt(state, grid, index)
-    if (units.length > 0) return { ...next, celebration: { units, origin: index } }
+    const digit = isDigitComplete(next, value) ? value : null
+    if (units.length > 0 || digit !== null) {
+      return { ...next, celebration: { units, origin: index, digit } }
+    }
   }
   return next
 }
@@ -406,6 +437,12 @@ const reduce = (state: GameState, action: GameAction): GameState => {
       return state.mode === 'value'
         ? inputValue(state, index, action.value)
         : inputNote(state, index, action.value)
+    }
+
+    case 'autoFill': {
+      const index = action.index
+      if (state.grid[index] !== 0 || isLocked(state, index)) return state
+      return inputValue(state, index, solutionAt(state, index))
     }
 
     case 'erase': {

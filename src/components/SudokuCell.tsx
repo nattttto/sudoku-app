@@ -117,7 +117,7 @@ function SudokuCellBase(props: CellProps) {
           className="tabular leading-none"
           style={{
             color,
-            fontSize: 'clamp(1.15rem, 5.4vw, 1.9rem)',
+            fontSize: 'clamp(1.1rem, 6.2cqw, 2.8rem)',
             fontWeight: isGiven ? 700 : 500,
           }}
         >
@@ -136,7 +136,7 @@ function SudokuCellBase(props: CellProps) {
                 <span
                   className="tabular flex aspect-square h-[88%] items-center justify-center rounded-full leading-none"
                   style={{
-                    fontSize: 'clamp(0.5rem, 2vw, 0.7rem)',
+                    fontSize: 'clamp(0.55rem, 3.1cqw, 1.25rem)',
                     color: remove
                       ? 'var(--hint-remove)'
                       : focus

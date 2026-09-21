@@ -7,14 +7,14 @@
  */
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { GameControls } from '@/components/GameControls'
 import { HintPanel } from '@/components/HintPanel'
 import { NumberPad } from '@/components/NumberPad'
 import { RestartButton } from '@/components/RestartButton'
+import { SettingsButton } from '@/components/SettingsButton'
 import { SoundToggle } from '@/components/SoundToggle'
 import { SudokuBoard } from '@/components/SudokuBoard'
-import { ThemeToggle } from '@/components/ThemeToggle'
 import { DIFFICULTIES, DIFFICULTY_LABEL } from '@/features/sudoku/board/types'
 import type { Difficulty } from '@/features/sudoku/board/types'
 import { canAddNote, createGame, isSettled } from '@/features/sudoku/game/gameState'
@@ -25,6 +25,7 @@ import { TECHNIQUE_MAP } from '@/features/sudoku/hints/types'
 import { nextPuzzle } from '@/features/sudoku/generator/puzzleSource'
 import { dailyPuzzle, dateKey, formatDateLabel } from '@/features/sudoku/stats/daily'
 import { addRecord } from '@/features/sudoku/stats/storage'
+import { useSettings } from '@/features/settings/settings'
 
 const formatTime = (ms: number): string => {
   const total = Math.floor(ms / 1000)
@@ -89,7 +90,31 @@ export function PlayScreen() {
   return <PlayScreenLoader key={key} mode={mode} />
 }
 
+const subscribeNothing = () => () => {}
+
+/**
+ * 問題は保存データ（localStorage）や乱数で決まり、サーバーでは同じものを作れない。
+ * サーバーで描くと画面の食い違い（hydration エラー）になるので、ブラウザでだけ描く。
+ */
 function PlayScreenLoader({ mode }: { mode: StartMode }) {
+  const isClient = useSyncExternalStore(
+    subscribeNothing,
+    () => true,
+    () => false,
+  )
+  if (!isClient) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-md items-center justify-center px-5">
+        <p className="text-sm" style={{ color: 'var(--muted)' }}>
+          問題を準備しています…
+        </p>
+      </main>
+    )
+  }
+  return <PlayScreenGame mode={mode} />
+}
+
+function PlayScreenGame({ mode }: { mode: StartMode }) {
   // 問題の決定は最初の1回だけ。以降は再描画しても同じ問題を使い続ける
   const [initial] = useState<GameState>(() => decideInitialGame(mode))
 
@@ -97,6 +122,7 @@ function PlayScreenLoader({ mode }: { mode: StartMode }) {
 }
 
 function PlayScreenInner({ initial }: { initial: GameState }) {
+  const { settings } = useSettings()
   const {
     state,
     dispatch,
@@ -113,7 +139,10 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
     applyHint,
     closeHint,
     restart,
-  } = useSudokuGame(initial)
+    autoFillAvailable,
+    autoFilling,
+    startAutoFill,
+  } = useSudokuGame(initial, { autoFillThreshold: settings.autoFillThreshold })
 
   const solved = state.status === 'solved'
   const hintActive = hint !== null
@@ -160,7 +189,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
 
   return (
     <main
-      className="mx-auto w-full max-w-md px-2 py-3 sm:px-4 lg:max-w-5xl lg:px-6"
+      className="mx-auto w-full max-w-xl px-2 py-3 sm:px-4 lg:max-w-6xl lg:px-6"
       // ヒントのシートが開いているときは、下の操作が隠れないように余白を足す
       style={{ paddingBottom: (hintActive || notice) && !solved ? '19rem' : undefined }}
     >
@@ -178,7 +207,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
             {formatTime(state.elapsedMs)}
           </span>
           <SoundToggle />
-          <ThemeToggle />
+          <SettingsButton />
         </div>
       </header>
 
@@ -191,7 +220,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
       ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6">
           {/* 盤面 */}
-          <div className="lg:mx-auto lg:w-full lg:max-w-[34rem]">
+          <div className="lg:mx-auto lg:w-full lg:max-w-[min(46rem,calc(100dvh_-_6.5rem))]">
             <div className="relative">
               <SudokuBoard
                 state={state}
@@ -269,15 +298,36 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
               onTogglePause={() => dispatch({ type: 'togglePause' })}
             />
 
-            <button
-              type="button"
-              onClick={requestHint}
-              disabled={state.paused}
-              className="rounded-xl border px-4 py-2.5 text-sm font-medium disabled:opacity-40"
-              style={{ borderColor: 'var(--input)', color: 'var(--input)' }}
-            >
-              💡 ヒント
-            </button>
+            {/*
+              終盤の自動入力は、設定でオンにしていて空きマスが少なくなったときだけ出す。
+              スマホで1画面に収めるため、行を増やさずヒントと横に並べる
+            */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={requestHint}
+                disabled={state.paused}
+                className="flex-1 rounded-xl border px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+                style={{ borderColor: 'var(--input)', color: 'var(--input)' }}
+              >
+                💡 ヒント
+              </button>
+              {(autoFillAvailable || autoFilling) && (
+                <button
+                  type="button"
+                  onClick={startAutoFill}
+                  disabled={autoFilling}
+                  className="flex-[1.6] rounded-xl px-3 py-2.5 text-sm font-semibold"
+                  style={{
+                    background: 'var(--celebrate)',
+                    color: 'var(--foreground)',
+                    opacity: autoFilling ? 0.7 : 1,
+                  }}
+                >
+                  {autoFilling ? '自動入力中…' : `✨ 残り${emptyCount}マスを自動入力`}
+                </button>
+              )}
+            </div>
 
             <HintPanel
               hint={hint}

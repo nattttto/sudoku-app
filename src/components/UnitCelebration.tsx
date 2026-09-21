@@ -1,11 +1,12 @@
 'use client'
 
 /**
- * ブロック・行・列の完成演出（画面側）。
+ * ブロック・行・列の完成と、数字のコンプリートの演出（画面側）。
  *
  * - ブロック：中央から星が弾ける
  * - 行・列  ：各マスの上で小さなきらめきが、完成マスから順に弾ける
- * - 札      ：「ブロック・行 完成」のように、何が揃ったかを1枚で出して浮かべて消す
+ * - 数字    ：その数字の9マスで大きな星が順に弾ける
+ * - 札      ：「ブロック・行 完成」「7 コンプリート」のように、何が揃ったかを1枚で出して浮かべて消す
  *
  * マス自体が光る演出は SudokuCell の .cell-celebrate が担当し、
  * ここはその上に重ねる飾りだけを受け持つ。操作の邪魔をしないよう
@@ -49,30 +50,67 @@ const areaOf = (unit: Unit) => {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
-export function UnitCelebration({ units, origin }: { units: Unit[]; origin: number }) {
+type Props = {
+  units: Unit[]
+  origin: number
+  /** 9個とも置き終えた数字。無ければ null */
+  digit: number | null
+  /** その数字が入っている9マス */
+  digitCells: number[]
+}
+
+export function UnitCelebration({ units, origin, digit, digitCells }: Props) {
   const originRow = rowOf(origin)
   const originCol = colOf(origin)
 
   // 札はブロックがあればその中央、無ければ最後に置いたマスの近くに出す。
   // 盤面の端で切れないよう、位置は内側に寄せる
-  const main = units[0]
+  const main = units[0] as Unit | undefined
   const badgeX =
-    main.type === 'col'
+    main?.type === 'col'
       ? clamp(main.index * CELL + CELL / 2, 20, 80)
-      : main.type === 'box'
+      : main?.type === 'box'
         ? clamp(areaOf(main).left + BOX / 2, 20, 80)
         : clamp(originCol * CELL + CELL / 2, 20, 80)
   const badgeY =
-    main.type === 'row'
+    main?.type === 'row'
       ? clamp(main.index * CELL + CELL / 2, 14, 92)
-      : main.type === 'box'
+      : main?.type === 'box'
         ? clamp(areaOf(main).top + BOX / 2, 14, 92)
         : clamp(originRow * CELL + CELL / 2, 14, 92)
 
-  const label = units.map((unit) => UNIT_LABEL[unit.type]).join('・')
+  const parts: string[] = []
+  if (units.length > 0) parts.push(`${units.map((unit) => UNIT_LABEL[unit.type]).join('・')} 完成`)
+  if (digit !== null) parts.push(`${digit} コンプリート`)
+  const excited = units.length >= 2 || digit !== null
+  // 札が長くなるときは、盤面の端で切れないよう横は中央に置く
+  const x = parts.length >= 2 ? 50 : badgeX
 
   return (
     <div className="pointer-events-none absolute inset-0" style={{ zIndex: 5 }} aria-live="polite">
+      {/* 数字のコンプリート：その数字の9マスで、最後に置いたマスから順に星が弾ける */}
+      {digitCells.map((index) => {
+        const row = rowOf(index)
+        const col = colOf(index)
+        const distance = Math.max(Math.abs(row - originRow), Math.abs(col - originCol))
+        return (
+          <span
+            key={`digit-${index}`}
+            aria-hidden
+            className="celebrate-star absolute leading-none"
+            style={{
+              left: `${col * CELL + CELL / 2}%`,
+              top: `${row * CELL + CELL / 2}%`,
+              color: 'var(--celebrate-ink)',
+              fontSize: '1.3rem',
+              animationDelay: `${distance * WAVE_STEP_MS + 80}ms`,
+            }}
+          >
+            ★
+          </span>
+        )
+      })}
+
       {units.map((unit) => {
         const area = areaOf(unit)
         const key = `${unit.type}${unit.index}`
@@ -142,14 +180,15 @@ export function UnitCelebration({ units, origin }: { units: Unit[]; origin: numb
       <span
         className="celebrate-badge absolute whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold"
         style={{
-          left: `${badgeX}%`,
+          left: `${x}%`,
           top: `${badgeY}%`,
           color: 'var(--celebrate-ink)',
           background: 'var(--surface)',
           boxShadow: '0 0 0 2px var(--celebrate), var(--shadow)',
         }}
       >
-        ✨ {label} 完成{units.length >= 2 ? '！' : ''}
+        ✨ {parts.join('・')}
+        {excited ? '！' : ''}
       </span>
     </div>
   )

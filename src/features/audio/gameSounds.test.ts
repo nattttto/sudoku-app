@@ -4,7 +4,7 @@ import { computeCandidates } from '../sudoku/candidates/candidateEngine'
 import { createGame, gameReducer } from '../sudoku/game/gameState'
 import type { GameAction, GameState } from '../sudoku/game/gameState'
 import type { Puzzle, Unit } from '../sudoku/board/types'
-import { soundForTransition } from './gameSounds'
+import { placedDigit, soundForTransition } from './gameSounds'
 import easyPool from '../../data/puzzles/easy.json'
 
 const PUZZLE = (easyPool as Puzzle[])[0]
@@ -170,5 +170,39 @@ describe('効果音の選び方', () => {
   it('リスタートは消した音', () => {
     const played = put(base, flexible.index, flexible.wrong)
     expect(soundOf(played, { type: 'restart' })).toBe('erase')
+  })
+})
+
+describe('数字のコンプリートと音の高さ', () => {
+  const base = createGame(PUZZLE)
+  const digit = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(
+    (n) => SOLUTION.filter((v, i) => v === n && base.grid[i] === 0).length >= 1,
+  )!
+  const cells = SOLUTION.flatMap((v, i) => (v === digit && base.grid[i] === 0 ? [i] : []))
+  const last = cells.at(-1)!
+  const almost = cells.slice(0, -1).reduce((s, i) => put(s, i, digit), base)
+  const selected = run(almost, { type: 'select', index: last })
+
+  it('9個目を置いたら、数字のコンプリートの音を鳴らす', () => {
+    expect(soundOf(selected, { type: 'input', value: digit })).toBe('digit')
+  })
+
+  it('音の高さには、置き終えた数字を使う', () => {
+    const next = gameReducer(selected, { type: 'input', value: digit })
+    expect(placedDigit(selected, next)).toBe(digit)
+  })
+
+  it('普通に置いたときは、置いた数字で高さを決める', () => {
+    const index = base.grid.findIndex((v) => v === 0)
+    const chosen = run(base, { type: 'select', index })
+    const next = gameReducer(chosen, { type: 'input', value: SOLUTION[index] })
+    expect(placedDigit(chosen, next)).toBe(SOLUTION[index])
+  })
+
+  it('自動入力でも、正解を置いた音を鳴らす', () => {
+    const index = base.grid.findIndex((v, i) => v === 0 && completesNothing(base, i))
+    const next = gameReducer(base, { type: 'autoFill', index })
+    if (next.celebration) return // 数字がそろってしまう配置なら、この確認は成立しない
+    expect(soundForTransition({ type: 'autoFill', index }, base, next)).toBe('place')
   })
 })

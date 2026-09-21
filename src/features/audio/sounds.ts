@@ -22,9 +22,19 @@ export type SoundName =
   | 'hint'
   | 'block'
   | 'combo'
+  | 'digit'
   | 'complete'
 
+/** 音ごとの追加情報。place は置いた数字で音の高さを変える */
+export type SoundOptions = {
+  digit?: number
+}
+
 const STORAGE_KEY = 'sudoku:sound'
+const VOLUME_KEY = 'sudoku:volume'
+
+/** 音量の既定値（%）。この値のときに、音の設計どおりの大きさで鳴る */
+export const DEFAULT_VOLUME = 70
 
 // ---- 有効・無効 ----
 
@@ -66,9 +76,55 @@ export const setSoundEnabled = (next: boolean): void => {
   listeners.forEach((listener) => listener())
 }
 
+// ---- 音量 ----
+
+let volume = DEFAULT_VOLUME
+let volumeLoaded = false
+
+const clampVolume = (value: number): number => Math.round(Math.min(Math.max(value, 0), 100))
+
+const loadVolume = (): number => {
+  if (volumeLoaded) return volume
+  volumeLoaded = true
+  try {
+    const raw = window.localStorage.getItem(VOLUME_KEY)
+    const stored = Number(raw)
+    volume = raw !== null && Number.isFinite(stored) ? clampVolume(stored) : DEFAULT_VOLUME
+  } catch {
+    volume = DEFAULT_VOLUME
+  }
+  return volume
+}
+
+/** 音量（0〜100%） */
+export const getVolume = (): number => loadVolume()
+
+export const getVolumeServer = (): number => DEFAULT_VOLUME
+
+export const setVolume = (next: number): void => {
+  volume = clampVolume(next)
+  volumeLoaded = true
+  try {
+    window.localStorage.setItem(VOLUME_KEY, String(volume))
+  } catch {
+    // 保存できなくても、このセッションでは変わる
+  }
+  if (master) master.gain.value = masterGainOf(volume)
+  listeners.forEach((listener) => listener())
+}
+
+/**
+ * スライダーの値から実際の音量への変換。
+ * 耳は音量を対数的に感じるので、2乗して小さい側を細かく調整できるようにする。
+ * 既定値（70%）でちょうど 1 倍になる。
+ */
+const masterGainOf = (value: number): number => (value / DEFAULT_VOLUME) ** 2
+
 // ---- 合成 ----
 
 let context: AudioContext | null = null
+/** すべての音はここを通す。音量はこの1か所で変える */
+let master: GainNode | null = null
 
 /**
  * AudioContext は最初の操作のときに作る。
@@ -84,6 +140,9 @@ const getContext = (): AudioContext | null => {
     if (!Ctor) return null
     try {
       context = new Ctor()
+      master = context.createGain()
+      master.gain.value = masterGainOf(loadVolume())
+      master.connect(context.destination)
     } catch {
       return null
     }
@@ -125,22 +184,30 @@ const tone = (ctx: AudioContext, options: ToneOptions): void => {
   amp.gain.exponentialRampToValueAtTime(0.0001, end)
 
   osc.connect(amp)
-  amp.connect(ctx.destination)
+  amp.connect(master ?? ctx.destination)
   osc.start(start)
   osc.stop(end + 0.02)
 }
 
+/**
+ * 正解を置いたときの音階。1=ド、2=レ … 8=高いド、9=高いレ。
+ * 置いた数字で高さが変わるので、続けて置くと旋律になる。
+ */
+const PLACE_SCALE = [523.25, 587.33, 659.25, 698.46, 783.99, 880, 987.77, 1046.5, 1174.66]
+
 /** 音の設計。数値はすべて耳で合わせたもの */
-const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
+const PLAY: Record<SoundName, (ctx: AudioContext, options: SoundOptions) => void> = {
   // マスを選ぶだけ。存在が分かる程度のごく小さな音
   select: (ctx) => {
     tone(ctx, { from: 1250, to: 1150, duration: 0.02, gain: 0.025, type: 'triangle' })
   },
 
-  // 数字を置く。これが主役の「ポチッ」
-  place: (ctx) => {
-    tone(ctx, { from: 1900, to: 1250, duration: 0.025, gain: 0.05, type: 'triangle' })
-    tone(ctx, { from: 640, to: 330, duration: 0.09, gain: 0.16 })
+  // 正解の数字を置く。数字ごとの音階で鳴らす（数字が分からないときはソ）
+  place: (ctx, { digit = 5 }) => {
+    const freq = PLACE_SCALE[Math.min(Math.max(digit, 1), 9) - 1]
+    tone(ctx, { from: freq, duration: 0.18, gain: 0.13 })
+    // 1オクターブ上を薄く重ねて、輪郭を出す
+    tone(ctx, { from: freq * 2, duration: 0.07, gain: 0.03, type: 'triangle' })
   },
 
   // メモ。数字より軽く高い「ピッ」
@@ -209,6 +276,26 @@ const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
     tone(ctx, { from: 1567.98, duration: 0.4, gain: 0.05, delay: 0.2 })
   },
 
+  // 1つの数字を9個とも置き終えたとき。
+  // その数字の音から1オクターブ駆け上がり、最後に和音で締める
+  digit: (ctx, { digit = 1 }) => {
+    const base = PLACE_SCALE[Math.min(Math.max(digit, 1), 9) - 1]
+    const steps = [1, 1.25, 1.5, 2] // ド・ミ・ソ・ド（その数字の音を主音にする）
+    steps.forEach((ratio, i) => {
+      const last = i === steps.length - 1
+      tone(ctx, { from: base * ratio, duration: last ? 0.5 : 0.12, gain: 0.1, delay: i * 0.075 })
+      tone(ctx, {
+        from: base * ratio * 2,
+        duration: last ? 0.3 : 0.06,
+        gain: 0.025,
+        type: 'triangle',
+        delay: i * 0.075,
+      })
+    })
+    tone(ctx, { from: base * 1.25, duration: 0.45, gain: 0.05, delay: 0.225 })
+    tone(ctx, { from: base * 1.5, duration: 0.45, gain: 0.05, delay: 0.225 })
+  },
+
   // クリア。ドミソドの分散和音
   complete: (ctx) => {
     ;[523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
@@ -224,15 +311,16 @@ const VIBRATION: Partial<Record<SoundName, number | number[]>> = {
   deny: 12,
   block: [10, 40, 10, 40, 18],
   combo: [10, 35, 10, 35, 10, 35, 24],
+  digit: [10, 35, 10, 35, 10, 35, 30],
 }
 
-export const playSound = (name: SoundName): void => {
+export const playSound = (name: SoundName, options: SoundOptions = {}): void => {
   if (!loadEnabled()) return
 
   const ctx = getContext()
-  if (ctx) {
+  if (ctx && loadVolume() > 0) {
     try {
-      PLAY[name](ctx)
+      PLAY[name](ctx, options)
     } catch {
       // 音が出せなくてもゲームは続けられる
     }
