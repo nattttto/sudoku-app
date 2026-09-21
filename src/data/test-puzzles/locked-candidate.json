@@ -1,0 +1,29 @@
+{
+  "technique": "LOCKED_CANDIDATES",
+  "grid": ".37.826......56.8.4...39...37.8.1..6...3.57....19.7.3.2..67.......51.8...43298...",
+  "eliminatedBefore": [],
+  "expected": {
+    "value": 8,
+    "eliminations": [
+      {
+        "cell": "R5C2",
+        "value": 8
+      },
+      {
+        "cell": "R5C3",
+        "value": 8
+      },
+      {
+        "cell": "R6C2",
+        "value": 8
+      }
+    ],
+    "relatedCells": [
+      "R5C1",
+      "R6C1",
+      "R5C2",
+      "R5C3",
+      "R6C2"
+    ]
+  }
+}

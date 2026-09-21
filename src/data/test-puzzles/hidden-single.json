@@ -1,0 +1,21 @@
+{
+  "technique": "HIDDEN_SINGLE",
+  "grid": "....7..8.1...6.7..8..5.....6.9.5....2.......447362.......9..1.2......6.7.54....9.",
+  "eliminatedBefore": [],
+  "expected": {
+    "targetCell": "R3C3",
+    "value": 7,
+    "eliminations": [],
+    "relatedCells": [
+      "R1C1",
+      "R1C2",
+      "R1C3",
+      "R2C1",
+      "R2C2",
+      "R2C3",
+      "R3C1",
+      "R3C2",
+      "R3C3"
+    ]
+  }
+}

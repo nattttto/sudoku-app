@@ -1,0 +1,21 @@
+{
+  "technique": "NAKED_SINGLE",
+  "grid": "....7..8.1...6.7..8..5.......9.5....2.......447362.......9..1.2......6.7.54....9.",
+  "eliminatedBefore": [],
+  "expected": {
+    "targetCell": "R4C1",
+    "value": 6,
+    "eliminations": [],
+    "relatedCells": [
+      "R4C1",
+      "R4C3",
+      "R4C5",
+      "R2C1",
+      "R3C1",
+      "R5C1",
+      "R6C1",
+      "R6C2",
+      "R6C3"
+    ]
+  }
+}

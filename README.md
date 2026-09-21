@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sudoku — 解き方を教える数独
 
-## Getting Started
+「答えを教える数独」ではなく、**「数独の解き方を教える数独」**。
 
-First, run the development server:
+ヒントを押しても答えは出ません。どの定石を使い、なぜその数字になるのかを、
+段階的に・視覚的に説明します。AIは使わず、決定論的なルールベースで推論します。
+
+## 起動
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## スクリプト
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| コマンド | 内容 |
+|---|---|
+| `npm run dev` | 開発サーバー |
+| `npm run build` | 本番ビルド |
+| `npm run check` | 型チェック＋テスト |
+| `npm run typecheck` | 型チェックのみ |
+| `npm test` | テストのみ |
+| `npm run gen:puzzles` | 事前生成の問題プールを作り直す |
+| `npm run gen:test-puzzles` | テクニック別のテスト用固定問題を作り直す |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 構成
 
-## Learn More
+```text
+src/
+├── app/                      画面（Home / Play）
+├── components/               盤面・入力・ヒントUI
+├── features/sudoku/
+│   ├── board/                盤面データとユーティリティ
+│   ├── candidates/           候補計算エンジン
+│   ├── solver/               解答・一意解判定（「解けるか」だけを担当）
+│   ├── generator/            問題生成・難易度判定・問題供給
+│   ├── hints/                ヒントエンジン（「次の一手の導き方」を担当）
+│   └── game/                 ゲーム状態・Undo/Redo・保存
+└── data/
+    ├── puzzles/              事前生成の問題プール（各難易度40問）
+    └── test-puzzles/         テクニック別のテスト用固定問題
+```
 
-To learn more about Next.js, take a look at the following resources:
+Solver と Hint Engine は役割を分けています。
+Solver は「解けるか・解答は何か」だけを担当し、Hint Engine は
+「今の盤面からどの論理テクニックで次の一手が導けるか」を担当します。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## ヒントエンジン
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+やさしい順に検索し、最初に見つかった論理的な手を提示します。
 
-## Deploy on Vercel
+| 順 | 定石 | Lv | 内容 |
+|---|---|---|---|
+| 1 | Naked Single | 1 | 候補が1つしか残っていないマス |
+| 2 | Hidden Single | 1 | その数字を置ける場所がユニット内に1つだけ |
+| 3 | Locked Candidates | 1 | ブロックと行・列の重なりで候補を絞る（Pointing / Claiming） |
+| 4 | Naked Pair | 1 | 2マスが同じ2候補だけを持つ |
+| 5 | Hidden Pair | 2 | 2つの数字が2マスにしか入らない |
+| 6 | Naked Triple | 2 | 3マスが3種類の候補を共有 |
+| 7 | Hidden Triple | 2 | 3つの数字が3マスにしか入らない |
+| 8 | X-Wing | 3 | 2行2列の長方形の関係 |
+| 9 | XY-Wing | 3 | 2候補マス3つの連鎖 |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+各ヒントは「答え」ではなく推論情報を返します。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```ts
+type Hint = {
+  technique: TechniqueId
+  targetCell?: string        // "R4C7"
+  value?: number
+  relatedCells: string[]
+  explanation: string        // 理由の文章
+  eliminations: { cell: string; value: number }[]
+  units: Unit[]              // 強調する行・列・ブロック
+  candidateMarks: CandidateMark[]
+  steps: [HintStep, HintStep, HintStep]  // 段階的ヒント
+}
+```
+
+### 段階的ヒント
+
+| STEP | 内容 | 画面 |
+|---|---|---|
+| 1 | 考え方 | 関係するユニットだけを強調 |
+| 2 | 対象を提示 | 対象セル・根拠セルを強調 |
+| 3 | 答えと理論 | 定石名・理由・消える候補を表示 |
+
+定石名は STEP 3 まで伏せています。先に名前が見えると考える余地がなくなるためです。
+
+## 難易度
+
+初期数字の数ではなく、**解くのにどの解法が必要だったか**で判定します。
+
+| 難易度 | 最も難しい解法 |
+|---|---|
+| かんたん | Naked Single / Hidden Single |
+| ふつう | Locked Candidates / Naked Pair |
+| むずかしい | Hidden Pair / Triple系 |
+| エキスパート | X-Wing / XY-Wing |
+
+生成した問題は必ず「一意解を持つ」かつ「ヒントエンジンだけで最後まで解ける」ことを確認しています。
+あてずっぽうでしか解けない問題は採用しません。
+
+## 問題の供給
+
+事前生成プール（各難易度40問）から即座に出題しつつ、裏では Web Worker が
+新しい問題を生成して在庫を補充します。開始を待たされず、同じ問題も続きません。
+
+## テスト
+
+ヒントエンジンを重点的にテストしています。
+テクニックごとに「そのテクニックが最初に発見される盤面」を固定問題として保存し、
+
+```text
+盤面 → Hint Engine → 期待する Technique / Cell / 候補消去
+```
+
+を検証します。固定問題は `npm run gen:test-puzzles` で作り直せます。
+
+## 未実装（今後）
+
+- Swordfish などの高度な解法
+- プレイ履歴・統計、デイリー数独
+- 解法ごとの練習モード
+- PWA化・オフライン対応

@@ -1,0 +1,42 @@
+{
+  "technique": "NAKED_PAIR",
+  "grid": ".37.826......56.8.4...39...37.8.1..6...3.57....19.7.3.2..67.......51.8...43298...",
+  "eliminatedBefore": [
+    "R5C2:8",
+    "R5C3:8",
+    "R6C2:8"
+  ],
+  "expected": {
+    "eliminations": [
+      {
+        "cell": "R8C1",
+        "value": 6
+      },
+      {
+        "cell": "R8C1",
+        "value": 9
+      },
+      {
+        "cell": "R8C8",
+        "value": 6
+      },
+      {
+        "cell": "R8C8",
+        "value": 9
+      },
+      {
+        "cell": "R8C9",
+        "value": 9
+      }
+    ],
+    "relatedCells": [
+      "R8C2",
+      "R8C3",
+      "R8C1",
+      "R8C1",
+      "R8C8",
+      "R8C8",
+      "R8C9"
+    ]
+  }
+}

@@ -1,26 +1,79 @@
 @import "tailwindcss";
 
+/*
+ * 盤面を主役にするため、色数は最小限にする。
+ * ヒントの可視化（仕様書13章）で使う色だけは、はっきり区別できるようにしておく。
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #1c1c1a;
+  --muted: #6f6f6a;
+  --line: #d6d6d0;
+  --line-strong: #2f2f2c;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* 入力した数字 */
+  --input: #1d63c4;
+  /* ルール違反 */
+  --danger: #c4331d;
+  --danger-bg: #fbe6e2;
+
+  /* 選択・同じ数字 */
+  --peer: #ecece7;
+  --same: #dce6f6;
+  --selected: #c9dcf7;
+
+  /* ヒント可視化 */
+  --hint-unit: #fdf3d4;
+  --hint-related: #fbe8ab;
+  --hint-target: #f6c945;
+  --hint-keep: #1a7f4b;
+  --hint-remove: #c4331d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #16161a;
+    --surface: #1f1f24;
+    --foreground: #ececef;
+    --muted: #9a9aa3;
+    --line: #3a3a42;
+    --line-strong: #8d8d98;
+
+    --input: #7cb0ff;
+    --danger: #ff8a75;
+    --danger-bg: #4a2420;
+
+    --peer: #2a2a31;
+    --same: #2e3b52;
+    --selected: #3b5480;
+
+    --hint-unit: #35301c;
+    --hint-related: #4d4526;
+    --hint-target: #8a7220;
+    --hint-keep: #6cd39b;
+    --hint-remove: #ff8a75;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    Meiryo, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 盤面の数字は等幅寄りのほうが読みやすい */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
