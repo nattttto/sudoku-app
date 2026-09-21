@@ -17,7 +17,7 @@ import { SudokuBoard } from '@/components/SudokuBoard'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { DIFFICULTIES, DIFFICULTY_LABEL } from '@/features/sudoku/board/types'
 import type { Difficulty } from '@/features/sudoku/board/types'
-import { createGame } from '@/features/sudoku/game/gameState'
+import { canAddNote, createGame, isSettled } from '@/features/sudoku/game/gameState'
 import type { GameState } from '@/features/sudoku/game/gameState'
 import { clearSavedGame, loadSavedGame } from '@/features/sudoku/game/storage'
 import { useSudokuGame } from '@/features/sudoku/game/useSudokuGame'
@@ -101,7 +101,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
     state,
     dispatch,
     autoCandidates,
-    conflicts,
+    wrongCells,
     remaining,
     requiredTechniques,
     hint,
@@ -123,6 +123,20 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
     [state.grid],
   )
   const hasNotes = useMemo(() => state.notes.some((n) => n !== 0), [state.notes])
+
+  // マス優先で選んでいるマスについて、確定済みか・どの数字がメモできないかを出す
+  const selectedSettled = state.selected !== null && isSettled(state, state.selected)
+  const blockedNotes = useMemo(() => {
+    const blocked = new Set<number>()
+    const index = state.selected
+    if (index === null || state.grid[index] !== 0) return blocked
+    for (let n = 1; n <= 9; n++) {
+      const alreadyNoted = (state.notes[index] & (1 << (n - 1))) !== 0
+      // すでに書いてあるメモは外せるように、押せるままにしておく
+      if (!alreadyNoted && !canAddNote(state, index, n)) blocked.add(n)
+    }
+    return blocked
+  }, [state])
 
   // クリアしたら記録を1回だけ残す
   const recorded = useRef(false)
@@ -182,7 +196,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
               <SudokuBoard
                 state={state}
                 autoCandidates={autoCandidates}
-                conflicts={conflicts}
+                wrongCells={wrongCells}
                 hintView={hintView}
                 hintActive={hintActive}
                 onSelect={(index) => dispatch({ type: 'tapCell', index })}
@@ -214,8 +228,8 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
             >
               <span>
                 残り {emptyCount} マス・ヒント {state.hintCount} 回・ミス {state.mistakes} 回
-                {conflicts.size > 0 && (
-                  <span style={{ color: 'var(--danger)' }}>・重複 {conflicts.size} マス</span>
+                {wrongCells.size > 0 && (
+                  <span style={{ color: 'var(--danger)' }}>・間違い {wrongCells.size} マス</span>
                 )}
               </span>
               <RestartButton onRestart={restart} />
@@ -230,6 +244,8 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
               activeDigit={state.activeDigit}
               remaining={remaining}
               noCellSelected={state.selected === null}
+              selectedSettled={selectedSettled}
+              blockedNotes={blockedNotes}
               disabled={state.paused}
               onSelectDigit={(digit) => dispatch({ type: 'selectDigit', digit })}
               onInput={(value) => dispatch({ type: 'input', value })}

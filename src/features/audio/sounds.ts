@@ -18,7 +18,10 @@ export type SoundName =
   | 'note'
   | 'erase'
   | 'error'
+  | 'deny'
   | 'hint'
+  | 'block'
+  | 'combo'
   | 'complete'
 
 const STORAGE_KEY = 'sudoku:sound'
@@ -151,7 +154,12 @@ const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
     tone(ctx, { from: 430, to: 170, duration: 0.11, gain: 0.11 })
   },
 
-  // 重複。責めすぎない低い2連
+  // 受け付けられない操作（ありえないメモなど）。間違いより軽い「ブッ」
+  deny: (ctx) => {
+    tone(ctx, { from: 190, to: 150, duration: 0.07, gain: 0.07, type: 'triangle' })
+  },
+
+  // 不正解。責めすぎない低い2連
   error: (ctx) => {
     tone(ctx, { from: 230, to: 190, duration: 0.07, gain: 0.1, type: 'triangle' })
     tone(ctx, { from: 200, to: 160, duration: 0.09, gain: 0.1, type: 'triangle', delay: 0.1 })
@@ -163,6 +171,44 @@ const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
     tone(ctx, { from: 840, duration: 0.12, gain: 0.08, delay: 0.09 })
   },
 
+  // ブロック完成。キラッと駆け上がる短いフレーズ
+  // クリアより高く速くして、「途中のごほうび」らしさを出す
+  block: (ctx) => {
+    const notes = [783.99, 1046.5, 1318.51, 1567.98] // ソ・ド・ミ・ソ
+    notes.forEach((freq, i) => {
+      const last = i === notes.length - 1
+      tone(ctx, { from: freq, duration: last ? 0.34 : 0.1, gain: 0.09, delay: i * 0.055 })
+      // 1オクターブ上を薄く重ねて、きらめきを足す
+      tone(ctx, {
+        from: freq * 2,
+        duration: last ? 0.22 : 0.06,
+        gain: 0.025,
+        type: 'triangle',
+        delay: i * 0.055,
+      })
+    })
+  },
+
+  // 1手でブロック・行・列のうち2つ以上が同時に完成したとき。
+  // ブロック完成のフレーズをさらに一段上まで駆け上がらせる
+  combo: (ctx) => {
+    const notes = [783.99, 1046.5, 1318.51, 1567.98, 2093.0] // ソ・ド・ミ・ソ・ド
+    notes.forEach((freq, i) => {
+      const last = i === notes.length - 1
+      tone(ctx, { from: freq, duration: last ? 0.42 : 0.09, gain: 0.09, delay: i * 0.05 })
+      tone(ctx, {
+        from: freq * 2,
+        duration: last ? 0.3 : 0.05,
+        gain: 0.025,
+        type: 'triangle',
+        delay: i * 0.05,
+      })
+    })
+    // 最後に和音を重ねて厚みを出す
+    tone(ctx, { from: 1318.51, duration: 0.4, gain: 0.05, delay: 0.2 })
+    tone(ctx, { from: 1567.98, duration: 0.4, gain: 0.05, delay: 0.2 })
+  },
+
   // クリア。ドミソドの分散和音
   complete: (ctx) => {
     ;[523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
@@ -172,9 +218,12 @@ const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
 }
 
 /** 端末が振動に対応していれば、ごく短く震わせて「ポチッ」を補強する */
-const VIBRATION: Partial<Record<SoundName, number>> = {
+const VIBRATION: Partial<Record<SoundName, number | number[]>> = {
   place: 8,
   error: 22,
+  deny: 12,
+  block: [10, 40, 10, 40, 18],
+  combo: [10, 35, 10, 35, 10, 35, 24],
 }
 
 export const playSound = (name: SoundName): void => {
@@ -189,10 +238,10 @@ export const playSound = (name: SoundName): void => {
     }
   }
 
-  const ms = VIBRATION[name]
-  if (ms && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+  const pattern = VIBRATION[name]
+  if (pattern && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
     try {
-      navigator.vibrate(ms)
+      navigator.vibrate(pattern)
     } catch {
       // 非対応端末では何もしない
     }
