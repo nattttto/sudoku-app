@@ -7,7 +7,9 @@ import { bit, computeCandidates, maskToNumbers } from '../candidates/candidateEn
 import { findHint } from '../hints/hintEngine'
 import type { Puzzle } from '../board/types'
 import {
+  autoFillTargets,
   canAddNote,
+  canAutoFill,
   correctCount,
   createGame,
   gameReducer,
@@ -741,5 +743,126 @@ describe('行・列の完成', () => {
     const done = run(state, { type: 'select', index: target }, { type: 'input', value: SOLUTION[target] })
     expect(done.celebration?.units[0]).toEqual(box)
     expect(done.celebration?.units).toContainEqual(row)
+  })
+})
+
+describe('数字のコンプリート', () => {
+  const base = createGame(PUZZLE)
+  // 空きが2つ以上ある数字（最後の1つの前後を比べたいため）
+  const digit = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(
+    (n) => SOLUTION.filter((v, i) => v === n && base.grid[i] === 0).length >= 2,
+  )!
+  const cells = SOLUTION.flatMap((v, i) => (v === digit && base.grid[i] === 0 ? [i] : []))
+  const last = cells.at(-1)!
+  const almost = cells
+    .slice(0, -1)
+    .reduce(
+      (state, i) => run(state, { type: 'select', index: i }, { type: 'input', value: digit }),
+      base,
+    )
+
+  it('9個そろうまでは数字の演出をしない', () => {
+    expect(almost.celebration?.digit ?? null).toBeNull()
+  })
+
+  it('9個目を正しく置くと、その数字を記録する', () => {
+    const done = run(almost, { type: 'select', index: last }, { type: 'input', value: digit })
+    expect(done.celebration?.digit).toBe(digit)
+    expect(done.celebration?.origin).toBe(last)
+  })
+
+  it('Undo すると演出は消える', () => {
+    const done = run(almost, { type: 'select', index: last }, { type: 'input', value: digit })
+    expect(gameReducer(done, { type: 'undo' }).celebration).toBeNull()
+  })
+})
+
+describe('終盤の自動入力', () => {
+  const base = createGame(PUZZLE)
+  const empties = base.grid.flatMap((v, i) => (v === 0 ? [i] : []))
+
+  /** 空きマスが n 個になるまで正解で埋める */
+  const leave = (n: number) =>
+    empties
+      .slice(0, empties.length - n)
+      .reduce((state, i) => gameReducer(state, { type: 'autoFill', index: i }), base)
+
+  it('設定がオフ（0）なら使えない', () => {
+    expect(canAutoFill(leave(3), 0)).toBe(false)
+  })
+
+  it('空きマスがしきい値より多いうちは使えない', () => {
+    expect(canAutoFill(leave(11), 10)).toBe(false)
+    expect(canAutoFill(leave(10), 10)).toBe(true)
+  })
+
+  it('不正解が残っていると使えない', () => {
+    const state = leave(10)
+    const index = state.grid.findIndex((v) => v === 0)
+    const wrong = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => n !== SOLUTION[index])!
+    const withWrong = run(state, { type: 'select', index }, { type: 'input', value: wrong })
+    expect(canAutoFill(withWrong, 10)).toBe(false)
+  })
+
+  it('選択に関係なく、指定のマスに正解を置く', () => {
+    const index = empties[0]
+    const next = gameReducer(base, { type: 'autoFill', index })
+    expect(next.grid[index]).toBe(SOLUTION[index])
+    expect(next.selected).toBeNull()
+    expect(next.mistakes).toBe(0)
+  })
+
+  it('埋まっているマスには何もしない', () => {
+    const filled = base.grid.findIndex((v) => v !== 0)
+    expect(gameReducer(base, { type: 'autoFill', index: filled })).toBe(base)
+  })
+
+  it('空きマスを順に埋めるとクリアになる', () => {
+    let state = leave(5)
+    for (const index of autoFillTargets(state)) {
+      state = gameReducer(state, { type: 'autoFill', index })
+    }
+    expect(state.status).toBe('solved')
+  })
+})
+
+describe('休憩中・クリア後は盤面を動かさない', () => {
+  const base = createGame(PUZZLE)
+  const index = firstEmpty(base)
+  const placed = run(base, { type: 'select', index }, { type: 'input', value: SOLUTION[index] })
+  const hint = findHint(base.grid, base.eliminated)!
+
+  it('休憩中にヒントを適用しても盤面は変わらない（シートが開いたままのとき）', () => {
+    const paused = gameReducer(base, { type: 'togglePause' })
+    expect(gameReducer(paused, { type: 'applyHint', hint })).toBe(paused)
+  })
+
+  it('休憩中は Undo / Redo も効かない（Ctrl+Z は押せてしまうため）', () => {
+    const paused = gameReducer(placed, { type: 'togglePause' })
+    expect(gameReducer(paused, { type: 'undo' })).toBe(paused)
+    const undone = run(placed, { type: 'undo' }, { type: 'togglePause' })
+    expect(gameReducer(undone, { type: 'redo' })).toBe(undone)
+  })
+
+  it('休憩中はメモの一括消去も効かない', () => {
+    const noted = run(base, { type: 'fillAllNotes' }, { type: 'togglePause' })
+    expect(gameReducer(noted, { type: 'clearAllNotes' })).toBe(noted)
+  })
+
+  it('クリア後に Undo しても、クリアは取り消されない', () => {
+    let state = createGame(PUZZLE)
+    for (const i of autoFillTargets(state)) state = gameReducer(state, { type: 'autoFill', index: i })
+    expect(state.status).toBe('solved')
+    expect(gameReducer(state, { type: 'undo' })).toBe(state)
+  })
+
+  it('埋まったマスを指す古いヒントを適用しても、正解は消えない', () => {
+    const target = parseCellId(hint.targetCell!)
+    const filled = run(
+      base,
+      { type: 'select', index: target },
+      { type: 'input', value: SOLUTION[target] },
+    )
+    expect(gameReducer(filled, { type: 'applyHint', hint }).grid[target]).toBe(SOLUTION[target])
   })
 })

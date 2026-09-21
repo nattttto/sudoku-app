@@ -55,14 +55,23 @@ export function SudokuBoard({
   const celebration = state.celebration
   const rejection = state.rejection
 
-  /** 完成したユニットに含まれるマス */
+  /** 完成したユニットに含まれるマスと、置き終えた数字の9マス */
+  const digitCells = useMemo(() => {
+    const cells: number[] = []
+    if (!celebration?.digit) return cells
+    for (let i = 0; i < CELL_COUNT; i++) if (state.grid[i] === celebration.digit) cells.push(i)
+    return cells
+    // 演出が始まった時点のマスだけでよい（あとの盤面の変化で光り直させない）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [celebration])
+
   const celebratedCells = useMemo(() => {
-    const cells = new Set<number>()
+    const cells = new Set<number>(digitCells)
     for (const unit of celebration?.units ?? []) {
       for (const i of unitIndices(unit)) cells.add(i)
     }
     return cells
-  }, [celebration])
+  }, [celebration, digitCells])
 
   const cells = useMemo(() => {
     return Array.from({ length: CELL_COUNT }, (_, index) => {
@@ -126,7 +135,8 @@ export function SudokuBoard({
   return (
     <div
       className="relative grid w-full grid-cols-9 overflow-hidden rounded-md"
-      style={{ background: 'var(--surface)' }}
+      // マスの文字の大きさを盤面の幅（cqw）で決めるため
+      style={{ background: 'var(--surface)', containerType: 'inline-size' }}
     >
       {cells.map((cell) => (
         <SudokuCell key={cell.index} {...cell} hintView={hintView} onSelect={onSelect} />
@@ -135,9 +145,11 @@ export function SudokuBoard({
         <UnitCelebration
           // key は「どの完成か」だけで決める。他の操作のたびに作り直すと演出が再生し直されてしまう。
           // 同じユニットが再び完成するのは Undo で一度 null を経た後だけなので、これで足りる
-          key={`${celebration.units.map((u) => `${u.type}${u.index}`).join('-')}@${celebration.origin}`}
+          key={`${celebration.units.map((u) => `${u.type}${u.index}`).join('-')}#${celebration.digit ?? ''}@${celebration.origin}`}
           units={celebration.units}
           origin={celebration.origin}
+          digit={celebration.digit}
+          digitCells={digitCells}
         />
       )}
     </div>

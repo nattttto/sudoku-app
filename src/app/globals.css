@@ -142,6 +142,7 @@ body {
  */
 @keyframes block-celebrate {
   0% {
+    z-index: 2;
     transform: scale(1);
   }
   35% {
@@ -152,6 +153,7 @@ body {
       0 0 16px var(--celebrate-glow);
   }
   100% {
+    z-index: 2;
     transform: scale(1);
   }
 }
@@ -170,9 +172,14 @@ body {
   }
 }
 
+/*
+ * 膨らむ間だけ手前に出す（z-index はキーフレームの中で指定する）。
+ * 終わったあとも z-index や transform を残すと、マスの大きさが端数のとき
+ * 手前のマスの背景が隣のマスの 1px の線を塗りつぶして、線が消えたように見える。
+ * そのため fill-mode は both ではなく backwards（開始待ちの間だけ最初の状態を保つ）。
+ */
 .cell-celebrate {
-  z-index: 2;
-  animation: block-celebrate 0.75s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation: block-celebrate 0.75s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
 }
 
 .cell-celebrate::after {
@@ -187,7 +194,7 @@ body {
     transparent 70%
   );
   opacity: 0;
-  animation: block-shine 0.6s ease-out both;
+  animation: block-shine 0.6s ease-out backwards;
   /* 親マスと同じだけ遅らせる */
   animation-delay: inherit;
 }
@@ -232,6 +239,31 @@ body {
 .celebrate-sparkle {
   opacity: 0;
   animation: celebrate-sparkle 0.6s ease-out both;
+}
+
+/* 数字のコンプリートで、その数字の9マスに出る大きな星。きらめきより大きく長く */
+@keyframes celebrate-star {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(-30deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.5) rotate(10deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -80%) scale(1.1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -150%) scale(0.6) rotate(0deg);
+  }
+}
+
+.celebrate-star {
+  opacity: 0;
+  animation: celebrate-star 0.95s ease-out both;
 }
 
 /*
@@ -316,7 +348,8 @@ body {
   }
   .cell-celebrate::after,
   .celebrate-particle,
-  .celebrate-sparkle {
+  .celebrate-sparkle,
+  .celebrate-star {
     animation: none;
     opacity: 0;
   }

@@ -22,6 +22,18 @@ const soundForGridChange = (prev: GameState, next: GameState): SoundName => {
   return value === solutionAt(next, index) ? 'place' : 'error'
 }
 
+/**
+ * 今回の変化で置かれた数字（効果音の高さを決めるのに使う）。
+ * 数字のコンプリートなら、その数字を返す。置かれていなければ undefined
+ */
+export const placedDigit = (prev: GameState, next: GameState): number | undefined => {
+  if (next.celebration && next.celebration !== prev.celebration && next.celebration.digit) {
+    return next.celebration.digit
+  }
+  const index = next.grid.findIndex((value, i) => value !== prev.grid[i])
+  return index >= 0 && next.grid[index] !== 0 ? next.grid[index] : undefined
+}
+
 export const soundForTransition = (
   action: GameAction,
   prev: GameState,
@@ -34,8 +46,9 @@ export const soundForTransition = (
   if (next.status === 'solved' && prev.status !== 'solved') return 'complete'
 
   // ブロック・行・列を埋め切ったら、置いた音の代わりにごほうびの音楽。
-  // 2つ以上同時に完成したら、さらに豪華にする
+  // 数字のコンプリートが一番まれなので最優先。2つ以上同時の完成はさらに豪華にする
   if (next.celebration && next.celebration !== prev.celebration) {
+    if (next.celebration.digit !== null) return 'digit'
     return next.celebration.units.length >= 2 ? 'combo' : 'block'
   }
 
@@ -53,6 +66,10 @@ export const soundForTransition = (
       if (next.selected !== prev.selected || next.activeDigit !== prev.activeDigit) {
         return 'select'
       }
+      return null
+
+    case 'autoFill':
+      if (next.grid !== prev.grid) return soundForGridChange(prev, next)
       return null
 
     case 'applyHint':
