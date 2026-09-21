@@ -15,8 +15,10 @@ export type CellProps = {
   isGiven: boolean
   isError: boolean
   isSelected: boolean
-  /** 選択中のマスと同じ行・列・ブロック */
-  isPeer: boolean
+  /** 選択中のマスと同じ行または列（十字） */
+  isPeerLine: boolean
+  /** 選択中のマスと同じブロック（十字の外） */
+  isPeerBox: boolean
   /** 注目中の数字（選択マスの数字、または数字優先モードで選択中の数字）と同じ */
   isHighlighted: boolean
   /** 表示する候補（自動候補 or 手書きメモ） */
@@ -40,7 +42,8 @@ const cellBackground = (p: CellProps): string => {
   if (p.hintView.relatedCells.has(p.index)) return 'var(--hint-related)'
   if (p.hintView.unitCells.has(p.index)) return 'var(--hint-unit)'
   if (p.isHighlighted) return 'var(--same)'
-  if (p.isPeer) return 'var(--peer)'
+  if (p.isPeerLine) return 'var(--peer-line)'
+  if (p.isPeerBox) return 'var(--peer-box)'
   // 3×3ブロックを市松に塗り分けて、まとまりを見えやすくする
   const box = boxOf(p.index)
   const checker = (Math.floor(box / 3) + (box % 3)) % 2 === 1

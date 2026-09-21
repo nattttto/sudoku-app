@@ -26,6 +26,18 @@ UIに渡すときだけ数字の配列に直す。
 
 サブセット系（Pair / Triple）は `hints/subsets.ts` の
 `makeNakedSubsetRule` / `makeHiddenSubsetRule` を再利用する。
+フィッシュ系（X-Wing / Swordfish / Jellyfish）は `hints/fish.ts` の `makeFishRule` を使う。
+
+### 出現頻度の低い定石のテスト
+
+Swordfish や XYZ-Wing は実際の問題ではめったに最初の一手にならないため、
+`make-test-puzzles.ts` の探索では固定問題が見つからないことがある。
+その場合は `hints/advanced.test.ts` のように**候補マスクを直接組み立てて**検証する。
+その際「もっとやさしい定石では解けないこと」（例: `expect(xWing(ctx)).toBeNull()`）も
+あわせて確認すること。これが無いと、そのパターンが本当に必要かを保証できない。
+
+実際の盤面で出番があるかは `npx tsx scripts/technique-usage.ts expert 40` で確認できる。
+（実測: エキスパート40問で XYZ-Wing 4問・Swordfish 1問が最難、Jellyfish は0問）
 
 ## 消去済み候補の扱い
 
@@ -61,6 +73,25 @@ React 側は `useSyncExternalStore` で読むだけ。`useEffect` で setState �
 
 CSS の配色はライトを `:root`、ダークを `:root[data-theme="dark"]` に書く。
 メディアクエリでの二重定義はしない。
+
+## 盤面のハイライト
+
+選択中のマスは**背景ではなく内側の枠線**（`--ring`）で示す。
+背景を使うと重複（`--danger-bg`）やヒントの色と取り合いになるため。
+
+関係するマスは十字（行・列）とブロックで塗り分ける。
+
+| 変数 | 用途 |
+|---|---|
+| `--peer-line` | 選択中のマスと同じ行・列。**はっきり見える濃さにする** |
+| `--peer-box` | 同じブロックで十字の外。十字より控えめ |
+| `--same` | 注目中の数字と同じ数字が入っているマス |
+
+`--peer-line` を地色（`--surface` / `--surface-alt`）に近づけると十字が消えて
+選択位置を追えなくなる。ここの差は意図的に大きく取ってある。
+
+背景色の優先順位は `SudokuCell.tsx` の `cellBackground` に一本化してある。
+**重複が最優先** — 見落とすとその後の推論がすべて無駄になるため。
 
 ## レイアウトの制約
 

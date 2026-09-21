@@ -99,7 +99,7 @@ export default function StatsPage() {
                       </div>
                       <div
                         className="mt-1 h-1.5 w-full overflow-hidden rounded-full"
-                        style={{ background: 'var(--peer)' }}
+                        style={{ background: 'var(--peer-box)' }}
                         role="img"
                         aria-label={`${meta.name} のヒント依存度 ${Math.round(ratio * 100)}パーセント`}
                       >
@@ -169,7 +169,7 @@ export default function StatsPage() {
                     title={`${day.date} : ${day.count}問`}
                     style={{
                       height: `${Math.max((day.count / max) * 100, 3)}%`,
-                      background: day.count > 0 ? 'var(--input)' : 'var(--peer)',
+                      background: day.count > 0 ? 'var(--input)' : 'var(--peer-box)',
                     }}
                   />
                 )

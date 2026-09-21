@@ -25,11 +25,16 @@
   --danger: #b32414;
   --danger-bg: #f8d4cd;
 
-  /* 選択・関連マス */
-  --peer: #e4e2da;
-  --same: #d2e2f8;
-  --selected: #b9d4f7;
-  --ring: #1657c0;
+  /*
+   * 選択・関連マス。
+   * 行と列（十字）はブロックより強く塗る。
+   * 地色との差が小さいと十字が見えないので、ここは意識的に差をつける。
+   */
+  --peer-line: #d3dcea;
+  --peer-box: #e7e4d9;
+  --same: #b9d0f2;
+  --selected: #8fbcf0;
+  --ring: #14489e;
 
   /* ヒント可視化 */
   --hint-unit: #fdf3d2;
@@ -54,10 +59,11 @@
   --danger: #ff7a63;
   --danger-bg: #4d2019;
 
-  --peer: #26262d;
-  --same: #2b3a52;
-  --selected: #3a5480;
-  --ring: #7db3ff;
+  --peer-line: #2f3a4e;
+  --peer-box: #2a2a33;
+  --same: #3a5074;
+  --selected: #4a6da6;
+  --ring: #9ec8ff;
 
   --hint-unit: #322d1a;
   --hint-related: #4a4124;

@@ -16,8 +16,11 @@ import { lockedCandidates } from './lockedCandidates'
 import { nakedPair } from './nakedPair'
 import { nakedSingle } from './nakedSingle'
 import { nakedTriple } from './nakedTriple'
+import { jellyfish } from './jellyfish'
+import { swordfish } from './swordfish'
 import { xWing } from './xWing'
 import { xyWing } from './xyWing'
+import { xyzWing } from './xyzWing'
 import { TECHNIQUE_MAP } from './types'
 import type { Hint, HintContext, HintRule, TechniqueId } from './types'
 
@@ -32,6 +35,9 @@ export const RULES: { id: TechniqueId; rule: HintRule }[] = [
   { id: 'HIDDEN_TRIPLE', rule: hiddenTriple },
   { id: 'X_WING', rule: xWing },
   { id: 'XY_WING', rule: xyWing },
+  { id: 'XYZ_WING', rule: xyzWing },
+  { id: 'SWORDFISH', rule: swordfish },
+  { id: 'JELLYFISH', rule: jellyfish },
 ]
 
 /** 空の消去マスク（1セルにつき「消された候補」のビット） */

@@ -57,12 +57,11 @@ export function SudokuBoard({
               ? maskToNumbers(autoCandidates[index])
               : []
 
-      const isPeer =
-        selected !== null &&
-        selected !== index &&
-        (rowOf(selected) === rowOf(index) ||
-          colOf(selected) === colOf(index) ||
-          boxOf(selected) === boxOf(index))
+      const related = selected !== null && selected !== index
+      // 十字（行・列）とブロックを塗り分ける。十字が見えないと選択位置を追えない
+      const isPeerLine =
+        related && (rowOf(selected!) === rowOf(index) || colOf(selected!) === colOf(index))
+      const isPeerBox = related && !isPeerLine && boxOf(selected!) === boxOf(index)
 
       return {
         index,
@@ -70,7 +69,8 @@ export function SudokuBoard({
         isGiven: state.givens[index] !== 0,
         isError: conflicts.has(index),
         isSelected: selected === index,
-        isPeer,
+        isPeerLine,
+        isPeerBox,
         isHighlighted: focusValue !== 0 && value === focusValue && selected !== index,
         candidates,
         noteCandidates: notes,
