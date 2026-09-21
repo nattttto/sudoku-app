@@ -149,7 +149,7 @@ export const useSudokuGame = (initial: GameState) => {
     setHint(found)
     setHintStep(0)
     setNotice(null)
-    dispatch({ type: 'countHint' })
+    dispatch({ type: 'countHint', technique: found.technique })
   }, [hint, conflicts.size, hasWrongInput, state.grid, state.eliminated])
 
   const nextHintStep = useCallback(() => setHintStep((step) => Math.min(step + 1, 2)), [])

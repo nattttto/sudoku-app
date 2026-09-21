@@ -7,7 +7,7 @@
  */
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { GameControls } from '@/components/GameControls'
 import { HintPanel } from '@/components/HintPanel'
 import { NumberPad } from '@/components/NumberPad'
@@ -22,6 +22,8 @@ import { clearSavedGame, loadSavedGame } from '@/features/sudoku/game/storage'
 import { useSudokuGame } from '@/features/sudoku/game/useSudokuGame'
 import { TECHNIQUE_MAP } from '@/features/sudoku/hints/types'
 import { nextPuzzle } from '@/features/sudoku/generator/puzzleSource'
+import { dailyPuzzle, dateKey, formatDateLabel } from '@/features/sudoku/stats/daily'
+import { addRecord } from '@/features/sudoku/stats/storage'
 
 const formatTime = (ms: number): string => {
   const total = Math.floor(ms / 1000)
@@ -35,12 +37,20 @@ const formatTime = (ms: number): string => {
 const isDifficulty = (value: string | null): value is Difficulty =>
   value !== null && (DIFFICULTIES as string[]).includes(value)
 
+type StartMode =
+  | { kind: 'new'; difficulty: Difficulty }
+  | { kind: 'resume' }
+  | { kind: 'daily'; date: string }
+
 /** 続きからの保存データがあればそれを、無ければ新しい問題を用意する */
-const decideInitialGame = (difficulty: Difficulty, wantsResume: boolean): GameState => {
-  if (wantsResume) {
+const decideInitialGame = (mode: StartMode): GameState => {
+  if (mode.kind === 'daily') {
+    return createGame(dailyPuzzle(mode.date), mode.date)
+  }
+  if (mode.kind === 'resume') {
     const saved = loadSavedGame()
     if (saved) {
-      const base = createGame(saved.puzzle)
+      const base = createGame(saved.puzzle, saved.dailyDate)
       return {
         ...base,
         grid: saved.grid,
@@ -48,38 +58,39 @@ const decideInitialGame = (difficulty: Difficulty, wantsResume: boolean): GameSt
         eliminated: saved.eliminated,
         elapsedMs: saved.elapsedMs,
         hintCount: saved.hintCount,
+        hintTechniques: saved.hintTechniques ?? {},
+        mistakes: saved.mistakes ?? 0,
       }
     }
+    return createGame(nextPuzzle('easy'))
   }
-  return createGame(nextPuzzle(difficulty))
+  return createGame(nextPuzzle(mode.difficulty))
 }
 
 export function PlayScreen() {
   const params = useSearchParams()
-  const difficulty: Difficulty = isDifficulty(params.get('difficulty'))
-    ? (params.get('difficulty') as Difficulty)
-    : 'easy'
-  const wantsResume = params.get('resume') === '1'
+
+  const mode: StartMode = params.get('daily')
+    ? { kind: 'daily', date: dateKey() }
+    : params.get('resume') === '1'
+      ? { kind: 'resume' }
+      : {
+          kind: 'new',
+          difficulty: isDifficulty(params.get('difficulty'))
+            ? (params.get('difficulty') as Difficulty)
+            : 'easy',
+        }
 
   // URL が変わったら作り直したいので、パラメータを key にして作り直させる
-  return (
-    <PlayScreenLoader
-      key={`${difficulty}:${wantsResume}`}
-      difficulty={difficulty}
-      wantsResume={wantsResume}
-    />
-  )
+  const key =
+    mode.kind === 'daily' ? `daily:${mode.date}` : mode.kind === 'resume' ? 'resume' : mode.difficulty
+
+  return <PlayScreenLoader key={key} mode={mode} />
 }
 
-function PlayScreenLoader({
-  difficulty,
-  wantsResume,
-}: {
-  difficulty: Difficulty
-  wantsResume: boolean
-}) {
+function PlayScreenLoader({ mode }: { mode: StartMode }) {
   // 問題の決定は最初の1回だけ。以降は再描画しても同じ問題を使い続ける
-  const [initial] = useState<GameState>(() => decideInitialGame(difficulty, wantsResume))
+  const [initial] = useState<GameState>(() => decideInitialGame(mode))
 
   return <PlayScreenInner key={initial.puzzle.givens} initial={initial} />
 }
@@ -112,9 +123,25 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
   )
   const hasNotes = useMemo(() => state.notes.some((n) => n !== 0), [state.notes])
 
+  // クリアしたら記録を1回だけ残す
+  const recorded = useRef(false)
   useEffect(() => {
-    if (solved) clearSavedGame()
-  }, [solved])
+    if (!solved || recorded.current) return
+    recorded.current = true
+    clearSavedGame()
+    addRecord({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      difficulty: state.puzzle.difficulty,
+      givens: state.puzzle.givens,
+      elapsedMs: state.elapsedMs,
+      hintCount: state.hintCount,
+      hintTechniques: state.hintTechniques,
+      mistakes: state.mistakes,
+      requiredTechniques: requiredTechniques,
+      completedAt: Date.now(),
+      daily: state.dailyDate,
+    })
+  }, [solved, state, requiredTechniques])
 
   return (
     <main
@@ -127,7 +154,11 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
           ← ホーム
         </Link>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium">{DIFFICULTY_LABEL[state.puzzle.difficulty]}</span>
+          <span className="text-sm font-medium">
+            {state.dailyDate
+              ? `今日の数独・${DIFFICULTY_LABEL[state.puzzle.difficulty]}`
+              : DIFFICULTY_LABEL[state.puzzle.difficulty]}
+          </span>
           <span className="tabular text-sm" style={{ color: 'var(--muted)' }}>
             {formatTime(state.elapsedMs)}
           </span>
@@ -180,7 +211,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
               style={{ color: 'var(--muted)' }}
             >
               <span>
-                残り {emptyCount} マス・ヒント {state.hintCount} 回
+                残り {emptyCount} マス・ヒント {state.hintCount} 回・ミス {state.mistakes} 回
                 {conflicts.size > 0 && (
                   <span style={{ color: 'var(--danger)' }}>・重複 {conflicts.size} マス</span>
                 )}
@@ -282,8 +313,26 @@ function ClearPanel({
     >
       <p className="text-xl font-semibold">クリア！</p>
       <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>
-        {DIFFICULTY_LABEL[state.puzzle.difficulty]}・{elapsed}・ヒント {state.hintCount} 回
+        {state.dailyDate
+          ? `今日の数独 ${formatDateLabel(state.dailyDate)}・`
+          : `${DIFFICULTY_LABEL[state.puzzle.difficulty]}・`}
+        {elapsed}
       </p>
+
+      <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
+        {[
+          ['タイム', elapsed],
+          ['ヒント', `${state.hintCount} 回`],
+          ['ミス', `${state.mistakes} 回`],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border p-2" style={{ borderColor: 'var(--line)' }}>
+            <dt className="text-[11px]" style={{ color: 'var(--muted)' }}>
+              {label}
+            </dt>
+            <dd className="tabular mt-0.5 text-sm font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
 
       {techniques.length > 0 && (
         <div className="mt-4 text-left">
@@ -292,11 +341,20 @@ function ClearPanel({
             {techniques.map((id) => {
               const meta = TECHNIQUE_MAP[id as keyof typeof TECHNIQUE_MAP]
               if (!meta) return null
+              const hinted = state.hintTechniques[id as keyof typeof TECHNIQUE_MAP] ?? 0
               return (
-                <li key={id} className="text-xs">
-                  <span className="font-medium">{meta.name}</span>
-                  <span className="ml-2" style={{ color: 'var(--muted)' }}>
-                    {meta.summary}
+                <li key={id} className="flex items-baseline justify-between gap-2 text-xs">
+                  <span>
+                    <span className="font-medium">{meta.name}</span>
+                    <span className="ml-2" style={{ color: 'var(--muted)' }}>
+                      {meta.summary}
+                    </span>
+                  </span>
+                  <span
+                    className="shrink-0"
+                    style={{ color: hinted > 0 ? 'var(--danger)' : 'var(--hint-keep)' }}
+                  >
+                    {hinted > 0 ? `ヒント${hinted}回` : '自力'}
                   </span>
                 </li>
               )
@@ -305,13 +363,20 @@ function ClearPanel({
         </div>
       )}
 
-      <div className="mt-5 flex justify-center gap-2">
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Link
           href={`/sudoku?difficulty=${state.puzzle.difficulty}`}
           className="rounded-lg px-4 py-2 text-sm font-medium"
           style={{ background: 'var(--input)', color: 'var(--surface)' }}
         >
           次の問題
+        </Link>
+        <Link
+          href="/stats"
+          className="rounded-lg border px-4 py-2 text-sm"
+          style={{ borderColor: 'var(--line)' }}
+        >
+          記録を見る
         </Link>
         <Link
           href="/"

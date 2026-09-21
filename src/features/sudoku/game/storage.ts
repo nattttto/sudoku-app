@@ -15,6 +15,9 @@ type SavedGame = {
   eliminated: number[]
   elapsedMs: number
   hintCount: number
+  hintTechniques?: GameState['hintTechniques']
+  mistakes?: number
+  dailyDate?: string
   savedAt: number
 }
 
@@ -73,6 +76,9 @@ export const saveGame = (state: GameState): void => {
     eliminated: state.eliminated,
     elapsedMs: state.elapsedMs,
     hintCount: state.hintCount,
+    hintTechniques: state.hintTechniques,
+    mistakes: state.mistakes,
+    dailyDate: state.dailyDate,
     savedAt: Date.now(),
   }
   try {

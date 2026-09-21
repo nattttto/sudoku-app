@@ -11,6 +11,9 @@ import {
   subscribeSavedGame,
 } from '@/features/sudoku/game/storage'
 import { prefetch } from '@/features/sudoku/generator/puzzleSource'
+import { dailyDifficulty, dateKey, formatDateLabel } from '@/features/sudoku/stats/daily'
+import { dailyStreakOf } from '@/features/sudoku/stats/stats'
+import { getRecords, getRecordsServer, subscribeRecords } from '@/features/sudoku/stats/storage'
 
 const formatTime = (ms: number): string => {
   const total = Math.floor(ms / 1000)
@@ -24,6 +27,11 @@ const formatTime = (ms: number): string => {
 export default function HomePage() {
   // 保存データはブラウザ側にしかないので、外部ストアとして読み取る
   const saved = useSyncExternalStore(subscribeSavedGame, getSavedSummary, getSavedSummaryServer)
+  const records = useSyncExternalStore(subscribeRecords, getRecords, getRecordsServer)
+
+  const today = dateKey()
+  const streak = dailyStreakOf(records, today)
+  const solvedToday = records.some((record) => record.daily === today)
 
   useEffect(() => {
     // よく使う難易度を先に1問作っておく
@@ -42,6 +50,22 @@ export default function HomePage() {
           答えではなく、解き方を教える数独
         </p>
       </header>
+
+      {/* 今日の数独。日付から決まるので、いつ開いても同じ問題になる */}
+      <Link
+        href="/sudoku?daily=1"
+        className="rounded-xl border px-4 py-3.5 text-center"
+        style={{ borderColor: 'var(--input)', background: 'var(--surface)' }}
+      >
+        <span className="text-base font-medium" style={{ color: 'var(--input)' }}>
+          今日の数独
+        </span>
+        <span className="mt-0.5 block text-xs" style={{ color: 'var(--muted)' }}>
+          {formatDateLabel(today)}・{DIFFICULTY_LABEL[dailyDifficulty(today)]}
+          {solvedToday ? '・クリア済み' : ''}
+          {streak > 0 ? `・${streak}日連続` : ''}
+        </span>
+      </Link>
 
       <nav className="flex flex-col gap-2">
         {DIFFICULTIES.map((difficulty) => (
@@ -71,6 +95,10 @@ export default function HomePage() {
           </Link>
         </div>
       )}
+
+      <Link href="/stats" className="text-center text-sm" style={{ color: 'var(--muted)' }}>
+        記録を見る
+      </Link>
     </main>
   )
 }

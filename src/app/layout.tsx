@@ -39,6 +39,13 @@ export default function RootLayout({
   return (
     <html lang="ja" suppressHydrationWarning>
       <head>
+        {/*
+          テーマは描画前に確定させたいので、head でそのまま実行する。
+          next/script の beforeInteractive は body の先頭に置かれるため、
+          ダーク設定の端末で一瞬ライトが見える可能性がある。
+          React は「クライアント描画では実行されない」と開発時に助言を出すが、
+          この処理は最初の1回だけ動けばよいので問題ない。
+        */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="antialiased">{children}</body>
