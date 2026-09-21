@@ -74,6 +74,24 @@ React 側は `useSyncExternalStore` で読むだけ。`useEffect` で setState �
 CSS の配色はライトを `:root`、ダークを `:root[data-theme="dark"]` に書く。
 メディアクエリでの二重定義はしない。
 
+## 効果音
+
+音源ファイルは持たない。`features/audio/sounds.ts` で Web Audio を使って合成する。
+「ポチッ」は短い打撃音（高め・20ms）と軽く下がる本体（低め・90ms）を重ねて作っている。
+
+**reducer は純粋なままにする。** 音は `useSudokuGame` の effect で
+「直前の状態」と「今の状態」を比べて鳴らす。どの音を鳴らすかの判断は
+`features/audio/gameSounds.ts` の `soundForTransition` に切り出してあり、
+副作用を持たないのでテストできる。
+
+### 間違いの音について
+
+**重複したときだけ鳴らし、「解答と違う数字」では鳴らさない。**
+重複は盤面を見れば分かる情報なので音にしても何も漏れないが、
+不正解を即座に音で教えると数独として成立しなくなる。
+`soundForGridChange` は `findConflicts` の増減で判断しており、
+`mistakes` は見ていない。ここを `mistakes` に変えてはいけない。
+
 ## 盤面のハイライト
 
 選択中のマスは**背景ではなく内側の枠線**（`--ring`）で示す。

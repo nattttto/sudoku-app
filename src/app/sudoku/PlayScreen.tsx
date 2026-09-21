@@ -12,6 +12,7 @@ import { GameControls } from '@/components/GameControls'
 import { HintPanel } from '@/components/HintPanel'
 import { NumberPad } from '@/components/NumberPad'
 import { RestartButton } from '@/components/RestartButton'
+import { SoundToggle } from '@/components/SoundToggle'
 import { SudokuBoard } from '@/components/SudokuBoard'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { DIFFICULTIES, DIFFICULTY_LABEL } from '@/features/sudoku/board/types'
@@ -162,6 +163,7 @@ function PlayScreenInner({ initial }: { initial: GameState }) {
           <span className="tabular text-sm" style={{ color: 'var(--muted)' }}>
             {formatTime(state.elapsedMs)}
           </span>
+          <SoundToggle />
           <ThemeToggle />
         </div>
       </header>
