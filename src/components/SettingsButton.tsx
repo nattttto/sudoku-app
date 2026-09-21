@@ -7,7 +7,7 @@
 import { useEffect, useId, useState } from 'react'
 import { useSound } from '@/features/audio/useSound'
 import { AUTO_FILL_CHOICES, useSettings } from '@/features/settings/settings'
-import { useTheme } from '@/features/theme/useTheme'
+import { PALETTES, usePalette, useTheme } from '@/features/theme/useTheme'
 
 export function SettingsButton({ className = '' }: { className?: string }) {
   const [open, setOpen] = useState(false)
@@ -33,6 +33,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
   const titleId = useId()
   const { soundEnabled, toggleSound, volume, changeVolume, previewVolume } = useSound()
   const { theme, setTheme } = useTheme()
+  const { palette, setPalette } = usePalette()
   const { settings, update } = useSettings()
 
   // Esc で閉じる。ゲームのキー操作（Esc で数字の選択解除）には渡さない
@@ -124,6 +125,46 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
             ]}
             onChange={setTheme}
           />
+        </Row>
+
+        <Row label="配色">
+          <div className="grid grid-cols-2 gap-2">
+            {PALETTES.map((option) => {
+              const active = option.id === palette
+              const swatch = option.swatch[theme]
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setPalette(option.id)}
+                  className="flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left"
+                  style={{
+                    borderColor: active ? 'var(--ring)' : 'var(--line)',
+                    boxShadow: active ? 'inset 0 0 0 1px var(--ring)' : undefined,
+                  }}
+                >
+                  {/* 見本：地色の上に、問題の数字と入力した数字 */}
+                  <span
+                    aria-hidden
+                    className="tabular flex h-8 w-10 shrink-0 items-center justify-center gap-1 rounded-md border text-sm"
+                    style={{ background: swatch.surface, borderColor: 'var(--line)' }}
+                  >
+                    <span style={{ color: swatch.given, fontWeight: 600 }}>5</span>
+                    <span style={{ color: swatch.input }}>3</span>
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm" style={{ fontWeight: active ? 600 : 400 }}>
+                      {option.id.toUpperCase()} {option.name}
+                    </span>
+                    <span className="block truncate text-[11px]" style={{ color: 'var(--muted)' }}>
+                      {option.description}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </Row>
 
         <Row

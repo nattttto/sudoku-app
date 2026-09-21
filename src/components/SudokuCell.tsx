@@ -118,7 +118,7 @@ function SudokuCellBase(props: CellProps) {
           style={{
             color,
             fontSize: 'clamp(1.1rem, 6.2cqw, 2.8rem)',
-            fontWeight: isGiven ? 700 : 500,
+            fontWeight: isGiven ? 600 : 500,
           }}
         >
           {value}

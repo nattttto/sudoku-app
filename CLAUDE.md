@@ -74,6 +74,14 @@ React 側は `useSyncExternalStore` で読むだけ。`useEffect` で setState �
 CSS の配色はライトを `:root`、ダークを `:root[data-theme="dark"]` に書く。
 メディアクエリでの二重定義はしない。
 
+配色は A〜D の4種類を `<html data-palette>` で切り替える（`usePalette`、`sudoku:palette`）。
+ライト / ダークとは独立していて、組み合わせは8通り。
+`:root` と `:root[data-theme="dark"]` が配色 A、B〜D は `:root[data-palette="b"]` と
+`:root[data-theme="dark"][data-palette="b"]` のように、ライト・ダークの両方で**同じ変数をすべて**上書きする。
+設定画面の見本の色は `useTheme.ts` の `PALETTES` に別に持っているので、CSS を変えたらそちらも揃えること。
+
+**真っ黒の文字と線は使わない。** 数字は配色に合わせた濃いグレー、ブロックの区切り線は中間のグレーにする。
+
 ## 効果音
 
 音源ファイルは持たない。`features/audio/sounds.ts` で Web Audio を使って合成する。

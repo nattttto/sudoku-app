@@ -127,7 +127,7 @@ export function HintPanel({ hint, step, notice, onNext, onApply, onClose }: Prop
             type="button"
             onClick={onApply}
             className="rounded-lg px-3 py-2 text-sm font-medium"
-            style={{ background: 'var(--input)', color: '#fff' }}
+            style={{ background: 'var(--input)', color: 'var(--surface)' }}
           >
             {hint.targetCell ? `${hint.targetCell} に ${hint.value} を入れる` : '候補を消す'}
           </button>

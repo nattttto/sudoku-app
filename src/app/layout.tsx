@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 }
 
 /**
- * 描画前にテーマを確定させる。
+ * 描画前にテーマ（ライト / ダーク）と配色（A〜D）を確定させる。
  * これが無いと、ダーク設定の端末で一瞬ライトの背景が出る。
  */
 const THEME_SCRIPT = `
@@ -25,8 +25,11 @@ const THEME_SCRIPT = `
       ? stored
       : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.dataset.theme = theme;
+    var palette = localStorage.getItem('sudoku:palette');
+    document.documentElement.dataset.palette = /^[abcd]$/.test(palette || '') ? palette : 'a';
   } catch (e) {
     document.documentElement.dataset.theme = 'light';
+    document.documentElement.dataset.palette = 'a';
   }
 })();
 `

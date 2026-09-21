@@ -2,43 +2,50 @@
 
 /*
  * 配色。
- * ライトを既定とし、ダークは data-theme="dark" で切り替える。
- * 初回描画前に layout.tsx のインラインスクリプトが data-theme を必ず入れるため、
+ * ライト / ダーク（data-theme）と、配色 A〜D（data-palette）の組み合わせで決まる。
+ * 初回描画前に layout.tsx のインラインスクリプトが両方を必ず入れるため、
  * メディアクエリでの二重定義はしない（値の管理を1か所に保つ）。
  *
- * 盤面が主役なので色数は絞る。ただしヒントの可視化（仕様書13章）で使う色と、
- * 行・列・ブロックの区別に必要なコントラストだけは確実に確保する。
+ * どの配色でも**真っ黒の文字と線は使わない**。数字は配色に合わせた濃いグレー、
+ * ブロックの区切り線は中間のグレーにして、コントラストはあるが硬く見えないようにする。
+ *
+ * ここ（:root / :root[data-theme="dark"]）は配色 A と、配色に依らない色（演出・ヒント）。
+ * B〜D は下の data-palette のブロックで、配色ごとの色だけを上書きする。
+ * 上書きするブロックでは、ライトとダークで同じ変数をすべて書くこと
+ * （片方だけだと、もう片方のテーマで A の色が混ざる）。
  */
 :root {
-  --background: #eceae3;
-  --surface: #ffffff;
+  --background: #e9ecf1;
+  --surface: #fbfcfd;
   /* 3×3ブロックを一目で区切るための、ごく淡い市松模様 */
-  --surface-alt: #f6f4ef;
-  --foreground: #16150f;
-  --muted: #67665e;
-  --line: #bfbdb2;
-  --line-strong: #2b2a24;
+  --surface-alt: #f2f4f8;
+  /* 問題の数字と、画面の文字 */
+  --foreground: #3a4556;
+  /* 補足の文字と、自動候補のメモ */
+  --muted: #7d8697;
+  --line: #d6dbe3;
+  --line-strong: #8b95a7;
 
   /* ユーザーが入力した数字 */
-  --input: #1657c0;
+  --input: #2f6bd0;
   /* ルール違反 */
-  --danger: #b32414;
-  --danger-bg: #f8d4cd;
+  --danger: #c2412d;
+  --danger-bg: #f9dcd5;
 
   /*
    * 選択・関連マス。
    * 行と列（十字）はブロックより強く塗る。
    * 地色との差が小さいと十字が見えないので、ここは意識的に差をつける。
    */
-  --peer-line: #d3dcea;
-  --peer-box: #e7e4d9;
-  --same: #b9d0f2;
-  --selected: #8fbcf0;
-  --ring: #14489e;
+  --peer-line: #dce5f2;
+  --peer-box: #eceff4;
+  --same: #cfe0f7;
+  --selected: #bcd5f7;
+  --ring: #3f7fe0;
 
   /* メモの中の、注目中の数字 */
-  --note-focus: #8fbcf0;
-  --note-focus-ink: #0d2b57;
+  --note-focus: #bcd5f7;
+  --note-focus-ink: #1d3f73;
 
   /* ブロック完成の演出 */
   --celebrate: #ffd257;
@@ -56,26 +63,26 @@
 }
 
 :root[data-theme="dark"] {
-  --background: #101014;
-  --surface: #1b1b20;
-  --surface-alt: #222228;
-  --foreground: #f0f0f3;
-  --muted: #a0a0aa;
-  --line: #3d3d46;
-  --line-strong: #9c9ca8;
+  --background: #14171c;
+  --surface: #1d2129;
+  --surface-alt: #222731;
+  --foreground: #cfd5de;
+  --muted: #8b94a5;
+  --line: #2e3542;
+  --line-strong: #5b6679;
 
-  --input: #7db3ff;
-  --danger: #ff7a63;
-  --danger-bg: #4d2019;
+  --input: #86b2f3;
+  --danger: #f08a78;
+  --danger-bg: #46231e;
 
-  --peer-line: #2f3a4e;
-  --peer-box: #2a2a33;
-  --same: #3a5074;
-  --selected: #4a6da6;
-  --ring: #9ec8ff;
+  --peer-line: #263247;
+  --peer-box: #232935;
+  --same: #314766;
+  --selected: #3d5a86;
+  --ring: #86b2f3;
 
-  --note-focus: #4a6da6;
-  --note-focus-ink: #ffffff;
+  --note-focus: #3d5a86;
+  --note-focus-ink: #e8f0ff;
 
   --celebrate: #9a7414;
   --celebrate-glow: rgb(255 200 60 / 0.45);
@@ -88,6 +95,129 @@
   --hint-remove: #ff7a63;
 
   --shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+/* ---- 配色 B：和紙（紙と墨のような、あたたかい茶系グレー） ---- */
+:root[data-palette="b"] {
+  --background: #eee8dc;
+  --surface: #fbf8f2;
+  --surface-alt: #f4efe5;
+  --foreground: #4b4238;
+  --muted: #8f8270;
+  --line: #e0d7c7;
+  --line-strong: #a39279;
+  --input: #2c6f8f;
+  --danger: #b8452f;
+  --danger-bg: #f5dbd2;
+  --peer-line: #e6e0cf;
+  --peer-box: #f1ece1;
+  --same: #cfe3ea;
+  --selected: #bddbe6;
+  --ring: #3a88ab;
+  --note-focus: #bddbe6;
+  --note-focus-ink: #1c4a5e;
+}
+
+:root[data-theme="dark"][data-palette="b"] {
+  --background: #191613;
+  --surface: #23201b;
+  --surface-alt: #29251f;
+  --foreground: #e4dbcc;
+  --muted: #9a8e7c;
+  --line: #39322a;
+  --line-strong: #6f6250;
+  --input: #7ec3db;
+  --danger: #ef8c77;
+  --danger-bg: #45241c;
+  --peer-line: #312b22;
+  --peer-box: #2a261f;
+  --same: #27414a;
+  --selected: #2f5664;
+  --ring: #7ec3db;
+  --note-focus: #2f5664;
+  --note-focus-ink: #e6f6fb;
+}
+
+/* ---- 配色 C：セージ（落ち着いたくすんだ緑） ---- */
+:root[data-palette="c"] {
+  --background: #e7ede7;
+  --surface: #fafcf9;
+  --surface-alt: #f1f5f0;
+  --foreground: #34463c;
+  --muted: #7a8a7e;
+  --line: #d3ddd4;
+  --line-strong: #87a092;
+  --input: #1f7a6b;
+  --danger: #bd4a33;
+  --danger-bg: #f6ddd4;
+  --peer-line: #d8e9e0;
+  --peer-box: #ebf0ea;
+  --same: #c7e6dc;
+  --selected: #b3dfd2;
+  --ring: #2a9a86;
+  --note-focus: #b3dfd2;
+  --note-focus-ink: #14493f;
+}
+
+:root[data-theme="dark"][data-palette="c"] {
+  --background: #131916;
+  --surface: #1b2320;
+  --surface-alt: #202a26;
+  --foreground: #d2e0d8;
+  --muted: #869890;
+  --line: #2c3833;
+  --line-strong: #566b62;
+  --input: #6fd0b6;
+  --danger: #ef8d78;
+  --danger-bg: #44251d;
+  --peer-line: #223630;
+  --peer-box: #212b27;
+  --same: #25453d;
+  --selected: #2d5a4f;
+  --ring: #6fd0b6;
+  --note-focus: #2d5a4f;
+  --note-focus-ink: #e3fff7;
+}
+
+/* ---- 配色 D：インディゴ（やわらかい紫紺） ---- */
+:root[data-palette="d"] {
+  --background: #ececf5;
+  --surface: #fcfcff;
+  --surface-alt: #f4f4fb;
+  --foreground: #3f4060;
+  --muted: #84849f;
+  --line: #dcdcec;
+  --line-strong: #9a9ac0;
+  --input: #5a55d6;
+  --danger: #c4453a;
+  --danger-bg: #f7dcd9;
+  --peer-line: #e3e2f7;
+  --peer-box: #efeff7;
+  --same: #d6d4f7;
+  --selected: #c9c6f6;
+  --ring: #6d68e6;
+  --note-focus: #c9c6f6;
+  --note-focus-ink: #2f2a86;
+}
+
+:root[data-theme="dark"][data-palette="d"] {
+  --background: #15151e;
+  --surface: #1e1e2a;
+  --surface-alt: #242432;
+  --foreground: #dadaf0;
+  --muted: #8d8dab;
+  --line: #31314a;
+  --line-strong: #61618a;
+  --input: #a9a6ff;
+  --danger: #f28e84;
+  --danger-bg: #462326;
+  --peer-line: #2a2a45;
+  --peer-box: #252533;
+  --same: #3a3769;
+  --selected: #4a4690;
+  --ring: #a9a6ff;
+  --note-focus: #4a4690;
+  --note-focus-ink: #f1f0ff;
 }
 
 @theme inline {
