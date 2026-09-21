@@ -11,8 +11,25 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#f7f7f5',
 }
+
+/**
+ * 描画前にテーマを確定させる。
+ * これが無いと、ダーク設定の端末で一瞬ライトの背景が出る。
+ */
+const THEME_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem('sudoku:theme');
+    var theme = stored === 'light' || stored === 'dark'
+      ? stored
+      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.dataset.theme = theme;
+  } catch (e) {
+    document.documentElement.dataset.theme = 'light';
+  }
+})();
+`
 
 export default function RootLayout({
   children,
@@ -20,7 +37,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   )

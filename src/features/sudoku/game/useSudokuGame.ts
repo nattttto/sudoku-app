@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { CELL_COUNT, findConflicts, parseGrid } from '../board/board'
 import { computeCandidateMasks } from '../candidates/candidateEngine'
-import { findHint } from '../hints/hintEngine'
+import { analyze, findHint } from '../hints/hintEngine'
 import { buildHintView, emptyHintView } from '../hints/hintView'
 import type { Hint } from '../hints/types'
 import { createGame, gameReducer } from './gameState'
@@ -45,6 +45,12 @@ export const useSudokuGame = (initial: GameState) => {
     return state.grid.some((value, i) => value !== 0 && value !== solution[i])
   }, [state.grid, state.puzzle.solution])
 
+  /** この問題を解くのに必要だった定石（クリア画面で振り返る） */
+  const requiredTechniques = useMemo(
+    () => (state.status === 'solved' ? analyze(state.givens).techniques : []),
+    [state.status, state.givens],
+  )
+
   const hintView = useMemo(
     () => (hint ? buildHintView(hint, hintStep) : emptyHintView()),
     [hint, hintStep],
@@ -64,10 +70,10 @@ export const useSudokuGame = (initial: GameState) => {
 
   // タイマー
   useEffect(() => {
-    if (state.status === 'solved') return
+    if (state.status === 'solved' || state.paused) return
     const timer = window.setInterval(() => dispatch({ type: 'tick', deltaMs: 1000 }), 1000)
     return () => window.clearInterval(timer)
-  }, [state.status])
+  }, [state.status, state.paused])
 
   // 自動保存（続きから用）
   useEffect(() => {
@@ -85,12 +91,25 @@ export const useSudokuGame = (initial: GameState) => {
         return
       }
       if (event.key >= '1' && event.key <= '9') {
-        dispatch({ type: 'input', value: Number(event.key) })
+        const value = Number(event.key)
+        // 数字優先モードでは、数字キーは「その数字を選ぶ」操作になる
+        dispatch(
+          state.inputStyle === 'digit'
+            ? { type: 'selectDigit', digit: value }
+            : { type: 'input', value },
+        )
       } else if (event.key === 'Backspace' || event.key === 'Delete' || event.key === '0') {
-        dispatch({ type: 'erase' })
+        dispatch(
+          state.inputStyle === 'digit' ? { type: 'selectDigit', digit: 'erase' } : { type: 'erase' },
+        )
       } else if (event.key === ' ') {
         event.preventDefault()
         dispatch({ type: 'toggleMode' })
+      } else if (event.key === 'Escape') {
+        dispatch({ type: 'selectDigit', digit: null })
+      } else if (event.key === 'Enter' && state.selected !== null) {
+        event.preventDefault()
+        dispatch({ type: 'tapCell', index: state.selected })
       } else if (state.selected !== null) {
         const moves: Record<string, number> = {
           ArrowLeft: -1,
@@ -107,7 +126,7 @@ export const useSudokuGame = (initial: GameState) => {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [state.selected])
+  }, [state.selected, state.inputStyle])
 
   const requestHint = useCallback(() => {
     if (hint) {
@@ -159,6 +178,7 @@ export const useSudokuGame = (initial: GameState) => {
     autoCandidates,
     conflicts,
     remaining,
+    requiredTechniques,
     hint,
     hintStep,
     hintView,

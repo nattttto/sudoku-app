@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { parseCellId, parseGrid } from '../board/board'
-import { maskToNumbers } from '../candidates/candidateEngine'
+import { computeCandidates, maskToNumbers } from '../candidates/candidateEngine'
 import { findHint } from '../hints/hintEngine'
 import type { Puzzle } from '../board/types'
 import { createGame, gameReducer } from './gameState'
@@ -187,6 +187,155 @@ describe('クリア判定', () => {
 
   it('途中では playing のまま', () => {
     expect(createGame(PUZZLE).status).toBe('playing')
+  })
+})
+
+describe('数字優先の入力方式', () => {
+  const base = createGame(PUZZLE)
+  const index = firstEmpty(base)
+
+  const digitFirst = (s: GameState) => gameReducer(s, { type: 'setInputStyle', style: 'digit' })
+
+  it('数字を選んでからマスをタップすると入力される', () => {
+    const after = run(
+      digitFirst(base),
+      { type: 'selectDigit', digit: 5 },
+      { type: 'tapCell', index },
+    )
+    expect(after.grid[index]).toBe(5)
+    expect(after.selected).toBe(index)
+    // 数字は選ばれたままで、続けて他のマスにも置ける
+    expect(after.activeDigit).toBe(5)
+  })
+
+  it('数字を選んでいなければタップしても選択されるだけ', () => {
+    const after = gameReducer(digitFirst(base), { type: 'tapCell', index })
+    expect(after.grid[index]).toBe(0)
+    expect(after.selected).toBe(index)
+  })
+
+  it('同じ数字をもう一度押すと選択が解除される', () => {
+    const after = run(
+      digitFirst(base),
+      { type: 'selectDigit', digit: 5 },
+      { type: 'selectDigit', digit: 5 },
+    )
+    expect(after.activeDigit).toBeNull()
+  })
+
+  it('消しゴムを選んでマスをタップすると消える', () => {
+    const after = run(
+      digitFirst(base),
+      { type: 'selectDigit', digit: 5 },
+      { type: 'tapCell', index },
+      { type: 'selectDigit', digit: 'erase' },
+      { type: 'tapCell', index },
+    )
+    expect(after.grid[index]).toBe(0)
+  })
+
+  it('メモモードと組み合わせるとメモが入る', () => {
+    const after = run(
+      digitFirst(base),
+      { type: 'setMode', mode: 'note' },
+      { type: 'selectDigit', digit: 3 },
+      { type: 'tapCell', index },
+    )
+    expect(after.grid[index]).toBe(0)
+    expect(maskToNumbers(after.notes[index])).toEqual([3])
+  })
+
+  it('問題の初期数字はタップしても変わらない', () => {
+    const givenIndex = base.grid.findIndex((v) => v !== 0)
+    const after = run(
+      digitFirst(base),
+      { type: 'selectDigit', digit: 5 },
+      { type: 'tapCell', index: givenIndex },
+    )
+    expect(after.grid[givenIndex]).toBe(base.grid[givenIndex])
+  })
+
+  it('マス優先ではタップしても数字は入らない', () => {
+    const after = run(base, { type: 'selectDigit', digit: 5 }, { type: 'tapCell', index })
+    expect(after.grid[index]).toBe(0)
+    expect(after.selected).toBe(index)
+  })
+
+  it('方式を戻すと選択中の数字は解除される', () => {
+    const after = run(
+      digitFirst(base),
+      { type: 'selectDigit', digit: 5 },
+      { type: 'setInputStyle', style: 'cell' },
+    )
+    expect(after.activeDigit).toBeNull()
+  })
+})
+
+describe('メモの一括操作', () => {
+  const base = createGame(PUZZLE)
+
+  it('すべての空きマスに計算した候補を書き込む', () => {
+    const after = gameReducer(base, { type: 'fillAllNotes' })
+    for (let i = 0; i < 81; i++) {
+      if (base.grid[i] !== 0) continue
+      const notes = maskToNumbers(after.notes[i])
+      expect(notes.length).toBeGreaterThan(0)
+      // 書き込まれた候補は、その盤面で実際に置ける数字であること
+      for (const value of notes) {
+        expect(computeCandidates(base.grid, i)).toContain(value)
+      }
+    }
+  })
+
+  it('数字が入っているマスにはメモを書かない', () => {
+    const after = gameReducer(base, { type: 'fillAllNotes' })
+    for (let i = 0; i < 81; i++) {
+      if (base.grid[i] !== 0) expect(after.notes[i]).toBe(0)
+    }
+  })
+
+  it('Undo で一括入力前に戻せる', () => {
+    const after = run(base, { type: 'fillAllNotes' }, { type: 'undo' })
+    expect(after.notes.every((n) => n === 0)).toBe(true)
+  })
+
+  it('メモを全消去できる', () => {
+    const after = run(base, { type: 'fillAllNotes' }, { type: 'clearAllNotes' })
+    expect(after.notes.every((n) => n === 0)).toBe(true)
+  })
+
+  it('メモが無いときの全消去は何も起きない', () => {
+    expect(gameReducer(base, { type: 'clearAllNotes' })).toBe(base)
+  })
+})
+
+describe('一時停止', () => {
+  const base = createGame(PUZZLE)
+  const index = firstEmpty(base)
+
+  it('停止中はタイマーが進まない', () => {
+    const after = run(base, { type: 'togglePause' }, { type: 'tick', deltaMs: 5000 })
+    expect(after.elapsedMs).toBe(0)
+  })
+
+  it('停止中は入力を受け付けない', () => {
+    const after = run(
+      base,
+      { type: 'togglePause' },
+      { type: 'select', index },
+      { type: 'input', value: 5 },
+    )
+    expect(after.grid[index]).toBe(0)
+  })
+
+  it('再開するとタイマーが進む', () => {
+    const after = run(
+      base,
+      { type: 'togglePause' },
+      { type: 'togglePause' },
+      { type: 'tick', deltaMs: 5000 },
+    )
+    expect(after.elapsedMs).toBe(5000)
   })
 })
 
