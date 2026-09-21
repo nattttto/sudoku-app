@@ -124,17 +124,23 @@ function SudokuCellBase(props: CellProps) {
           {value}
         </span>
       ) : candidates.length > 0 ? (
-        <span className="grid h-full w-full grid-cols-3 grid-rows-3 p-[2px]">
+        <span className="grid h-full w-full grid-cols-3 grid-rows-3 gap-px p-px">
           {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => {
             const shown = candidates.includes(n)
             const focus = isFocusCandidate(hintView, index, n)
             const remove = isRemoveCandidate(hintView, index, n)
-            // 注目中の数字と同じメモは、丸で囲んで目立たせる（ヒントの強調が優先）
+            /*
+             * 注目中の数字と同じメモは、9分割した区画そのものを塗る。
+             * 数字を読むより「その区画に色が付いている」ことで気づけるようにするため
+             * （丸だと区画の形が見えず、どこの候補か掴みにくかった）。
+             * 白抜きにはせず、他のメモは少しだけ薄くして浮かせる。ヒントの強調が優先。
+             */
             const matches = shown && !focus && !remove && n === props.focusDigit
+            const receded = props.focusDigit !== 0 && !matches && !focus && !remove
             return (
-              <span key={n} className="flex items-center justify-center">
+              <span key={n} className="flex items-stretch justify-stretch">
                 <span
-                  className="tabular flex aspect-square h-[88%] items-center justify-center rounded-full leading-none"
+                  className="tabular flex h-full w-full items-center justify-center rounded-[3px] leading-none"
                   style={{
                     fontSize: 'clamp(0.55rem, 3.1cqw, 1.25rem)',
                     color: remove
@@ -149,7 +155,7 @@ function SudokuCellBase(props: CellProps) {
                     background: matches ? 'var(--note-focus)' : undefined,
                     fontWeight: focus || remove || matches ? 700 : 500,
                     textDecoration: remove ? 'line-through' : 'none',
-                    opacity: shown ? 1 : 0,
+                    opacity: !shown ? 0 : receded ? 0.55 : 1,
                   }}
                 >
                   {n}
