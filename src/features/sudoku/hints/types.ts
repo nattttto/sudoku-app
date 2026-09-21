@@ -14,6 +14,9 @@ export type TechniqueId =
   | 'HIDDEN_TRIPLE'
   | 'X_WING'
   | 'XY_WING'
+  | 'XYZ_WING'
+  | 'SWORDFISH'
+  | 'JELLYFISH'
 
 /** テクニックのメタ情報。難易度判定（仕様書14章）にも使う */
 export type TechniqueMeta = {
@@ -92,6 +95,27 @@ export const TECHNIQUES: TechniqueMeta[] = [
     summary: '3つの2候補セルの連鎖で候補を消す',
     level: 3,
     weight: 14,
+  },
+  {
+    id: 'XYZ_WING',
+    name: 'XYZ-Wing',
+    summary: '3候補のセルを軸にした連鎖で候補を消す',
+    level: 4,
+    weight: 16,
+  },
+  {
+    id: 'SWORDFISH',
+    name: 'Swordfish',
+    summary: '3行3列の対応で候補を消す',
+    level: 4,
+    weight: 18,
+  },
+  {
+    id: 'JELLYFISH',
+    name: 'Jellyfish',
+    summary: '4行4列の対応で候補を消す',
+    level: 4,
+    weight: 20,
   },
 ]
 

@@ -1,59 +1,77 @@
 @import "tailwindcss";
 
 /*
- * 盤面を主役にするため、色数は最小限にする。
- * ヒントの可視化（仕様書13章）で使う色だけは、はっきり区別できるようにしておく。
+ * 配色。
+ * ライトを既定とし、ダークは data-theme="dark" で切り替える。
+ * 初回描画前に layout.tsx のインラインスクリプトが data-theme を必ず入れるため、
+ * メディアクエリでの二重定義はしない（値の管理を1か所に保つ）。
+ *
+ * 盤面が主役なので色数は絞る。ただしヒントの可視化（仕様書13章）で使う色と、
+ * 行・列・ブロックの区別に必要なコントラストだけは確実に確保する。
  */
 :root {
-  --background: #f7f7f5;
+  --background: #eceae3;
   --surface: #ffffff;
-  --foreground: #1c1c1a;
-  --muted: #6f6f6a;
-  --line: #d6d6d0;
-  --line-strong: #2f2f2c;
+  /* 3×3ブロックを一目で区切るための、ごく淡い市松模様 */
+  --surface-alt: #f6f4ef;
+  --foreground: #16150f;
+  --muted: #67665e;
+  --line: #bfbdb2;
+  --line-strong: #2b2a24;
 
-  /* 入力した数字 */
-  --input: #1d63c4;
+  /* ユーザーが入力した数字 */
+  --input: #1657c0;
   /* ルール違反 */
-  --danger: #c4331d;
-  --danger-bg: #fbe6e2;
+  --danger: #b32414;
+  --danger-bg: #f8d4cd;
 
-  /* 選択・同じ数字 */
-  --peer: #ecece7;
-  --same: #dce6f6;
-  --selected: #c9dcf7;
+  /*
+   * 選択・関連マス。
+   * 行と列（十字）はブロックより強く塗る。
+   * 地色との差が小さいと十字が見えないので、ここは意識的に差をつける。
+   */
+  --peer-line: #d3dcea;
+  --peer-box: #e7e4d9;
+  --same: #b9d0f2;
+  --selected: #8fbcf0;
+  --ring: #14489e;
 
   /* ヒント可視化 */
-  --hint-unit: #fdf3d4;
-  --hint-related: #fbe8ab;
-  --hint-target: #f6c945;
-  --hint-keep: #1a7f4b;
-  --hint-remove: #c4331d;
+  --hint-unit: #fdf3d2;
+  --hint-related: #f8e29c;
+  --hint-target: #f3c231;
+  --hint-keep: #116f3c;
+  --hint-remove: #b32414;
+
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #16161a;
-    --surface: #1f1f24;
-    --foreground: #ececef;
-    --muted: #9a9aa3;
-    --line: #3a3a42;
-    --line-strong: #8d8d98;
+:root[data-theme="dark"] {
+  --background: #101014;
+  --surface: #1b1b20;
+  --surface-alt: #222228;
+  --foreground: #f0f0f3;
+  --muted: #a0a0aa;
+  --line: #3d3d46;
+  --line-strong: #9c9ca8;
 
-    --input: #7cb0ff;
-    --danger: #ff8a75;
-    --danger-bg: #4a2420;
+  --input: #7db3ff;
+  --danger: #ff7a63;
+  --danger-bg: #4d2019;
 
-    --peer: #2a2a31;
-    --same: #2e3b52;
-    --selected: #3b5480;
+  --peer-line: #2f3a4e;
+  --peer-box: #2a2a33;
+  --same: #3a5074;
+  --selected: #4a6da6;
+  --ring: #9ec8ff;
 
-    --hint-unit: #35301c;
-    --hint-related: #4d4526;
-    --hint-target: #8a7220;
-    --hint-keep: #6cd39b;
-    --hint-remove: #ff8a75;
-  }
+  --hint-unit: #322d1a;
+  --hint-related: #4a4124;
+  --hint-target: #8f7620;
+  --hint-keep: #62d195;
+  --hint-remove: #ff7a63;
+
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.5);
 }
 
 @theme inline {
@@ -64,6 +82,10 @@
   --color-line: var(--line);
 }
 
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -71,9 +93,34 @@ body {
     ui-sans-serif, system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP",
     Meiryo, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-/* 盤面の数字は等幅寄りのほうが読みやすい */
+/* 盤面の数字は幅が揃っているほうが読みやすい */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* 重複を入力した瞬間に気づけるよう、そのマスを一度だけ揺らす */
+@keyframes cell-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-2px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+}
+
+.cell-error {
+  animation: cell-shake 0.22s ease-in-out 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell-error {
+    animation: none;
+  }
 }

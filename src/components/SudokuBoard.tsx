@@ -31,7 +31,17 @@ export function SudokuBoard({
   onSelect,
 }: Props) {
   const selected = state.selected
-  const selectedValue = selected === null ? 0 : state.grid[selected]
+
+  /**
+   * 盤面で強調する数字。
+   * 数字優先モードで数字を選んでいればそれを、そうでなければ選択マスの数字を使う。
+   */
+  const focusValue =
+    typeof state.activeDigit === 'number'
+      ? state.activeDigit
+      : selected !== null
+        ? state.grid[selected]
+        : 0
 
   const cells = useMemo(() => {
     return Array.from({ length: CELL_COUNT }, (_, index) => {
@@ -47,12 +57,11 @@ export function SudokuBoard({
               ? maskToNumbers(autoCandidates[index])
               : []
 
-      const isPeer =
-        selected !== null &&
-        selected !== index &&
-        (rowOf(selected) === rowOf(index) ||
-          colOf(selected) === colOf(index) ||
-          boxOf(selected) === boxOf(index))
+      const related = selected !== null && selected !== index
+      // 十字（行・列）とブロックを塗り分ける。十字が見えないと選択位置を追えない
+      const isPeerLine =
+        related && (rowOf(selected!) === rowOf(index) || colOf(selected!) === colOf(index))
+      const isPeerBox = related && !isPeerLine && boxOf(selected!) === boxOf(index)
 
       return {
         index,
@@ -60,19 +69,20 @@ export function SudokuBoard({
         isGiven: state.givens[index] !== 0,
         isError: conflicts.has(index),
         isSelected: selected === index,
-        isPeer,
-        isSameValue: selectedValue !== 0 && value === selectedValue && selected !== index,
+        isPeerLine,
+        isPeerBox,
+        isHighlighted: focusValue !== 0 && value === focusValue && selected !== index,
         candidates,
         noteCandidates: notes,
         dimmed: hintActive && !hintView.inScope.has(index),
       }
     })
-  }, [state, autoCandidates, conflicts, selected, selectedValue, hintActive, hintView])
+  }, [state, autoCandidates, conflicts, selected, focusValue, hintActive, hintView])
 
   return (
     <div
-      className="grid w-full grid-cols-9 overflow-hidden rounded-sm"
-      style={{ borderColor: 'var(--line-strong)' }}
+      className="grid w-full grid-cols-9 overflow-hidden rounded-md"
+      style={{ background: 'var(--surface)' }}
     >
       {cells.map((cell) => (
         <SudokuCell key={cell.index} {...cell} hintView={hintView} onSelect={onSelect} />

@@ -24,15 +24,19 @@ type Props = {
 const STEP_LABEL = ['考え方', 'もう少しヒント', '答えと理論']
 
 /**
- * 画面下に固定して表示する。
- * 盤面を見ながら読めるようにし、スクロールしないと気づけない状態を避ける。
+ * 狭い画面では下部に固定したシートとして出す（スクロールしないと気づけない状態を避ける）。
+ * 広い画面では右の操作カラムにそのまま収まるので、固定をやめて流し込む。
  */
 function Sheet({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 px-3 pb-3 sm:px-5">
+    <div className="fixed inset-x-0 bottom-0 z-20 px-3 pb-3 sm:px-5 lg:static lg:px-0 lg:pb-0">
       <div
-        className="mx-auto max-h-[60dvh] w-full max-w-md overflow-y-auto rounded-2xl border p-4 shadow-lg"
-        style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}
+        className="mx-auto max-h-[60dvh] w-full max-w-md overflow-y-auto rounded-2xl border p-4 lg:max-h-none lg:max-w-none"
+        style={{
+          borderColor: 'var(--line)',
+          background: 'var(--surface)',
+          boxShadow: 'var(--shadow)',
+        }}
       >
         {children}
       </div>

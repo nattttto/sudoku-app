@@ -1,8 +1,13 @@
 /**
- * ゲーム状態とその更新（Phase 1: 入力・Undo/Redo・リスタート）。
+ * ゲーム状態とその更新。
  *
  * 盤面の数字・ユーザーの候補メモ・ヒントで消した候補をまとめて1つの状態として扱い、
  * 変更のたびにスナップショットを積むことで Undo / Redo を実現する。
+ *
+ * 入力方式は2通りある（inputStyle）。
+ *   cell  : マスを選んでから数字を押す
+ *   digit : 数字を選んでからマスをタップする（消しゴムも選べる）
+ * どちらでも「数字として入れる / メモとして入れる」（mode）を切り替えられる。
  */
 import {
   CELL_COUNT,
@@ -12,11 +17,17 @@ import {
   parseCellId,
   parseGrid,
 } from '../board/board'
-import { bit, maskToNumbers } from '../candidates/candidateEngine'
+import { bit, computeCandidateMasks, maskToNumbers } from '../candidates/candidateEngine'
 import type { Grid, Puzzle } from '../board/types'
-import type { Hint } from '../hints/types'
+import type { Hint, TechniqueId } from '../hints/types'
 
+/** 数字として入れるか、候補メモとして入れるか */
 export type InputMode = 'value' | 'note'
+/** マス優先か、数字優先か */
+export type InputStyle = 'cell' | 'digit'
+/** 数字優先モードで選択中のもの。'erase' は消しゴム */
+export type DigitSelection = number | 'erase' | null
+
 export type GameStatus = 'playing' | 'solved'
 
 /** Undo / Redo で戻せる範囲の状態 */
@@ -34,29 +45,46 @@ export type GameState = Snapshot & {
   givens: Grid
   selected: number | null
   mode: InputMode
+  inputStyle: InputStyle
+  /** 数字優先モードで選択中の数字 */
+  activeDigit: DigitSelection
   /** 自動候補の表示 */
   showCandidates: boolean
   past: Snapshot[]
   future: Snapshot[]
   elapsedMs: number
+  paused: boolean
   status: GameStatus
   /** ヒントを使った回数 */
   hintCount: number
+  /** ヒントで見た定石とその回数（プレイ記録に残す） */
+  hintTechniques: Partial<Record<TechniqueId, number>>
+  /** 解答と違う数字を入れた回数 */
+  mistakes: number
+  /** デイリー数独として遊んでいる場合の日付（YYYY-MM-DD） */
+  dailyDate?: string
 }
 
 export type GameAction =
   | { type: 'select'; index: number | null }
+  | { type: 'tapCell'; index: number }
   | { type: 'setMode'; mode: InputMode }
   | { type: 'toggleMode' }
+  | { type: 'setInputStyle'; style: InputStyle }
+  | { type: 'toggleInputStyle' }
+  | { type: 'selectDigit'; digit: DigitSelection }
   | { type: 'toggleCandidates' }
+  | { type: 'fillAllNotes' }
+  | { type: 'clearAllNotes' }
   | { type: 'input'; value: number }
   | { type: 'erase' }
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'restart' }
   | { type: 'tick'; deltaMs: number }
+  | { type: 'togglePause' }
   | { type: 'applyHint'; hint: Hint }
-  | { type: 'countHint' }
+  | { type: 'countHint'; technique: TechniqueId }
   | { type: 'load'; state: GameState }
 
 const emptyMasks = (): number[] => new Array<number>(CELL_COUNT).fill(0)
@@ -67,24 +95,34 @@ const snapshotOf = (state: Snapshot): Snapshot => ({
   eliminated: state.eliminated.slice(),
 })
 
-export const createGame = (puzzle: Puzzle): GameState => {
+export const createGame = (puzzle: Puzzle, dailyDate?: string): GameState => {
   const givens = parseGrid(puzzle.givens)
   return {
     puzzle,
     givens,
+    dailyDate,
     grid: givens.slice(),
     notes: emptyMasks(),
     eliminated: emptyMasks(),
     selected: null,
     mode: 'value',
+    inputStyle: 'cell',
+    activeDigit: null,
     showCandidates: false,
     past: [],
     future: [],
     elapsedMs: 0,
+    paused: false,
     status: 'playing',
     hintCount: 0,
+    hintTechniques: {},
+    mistakes: 0,
   }
 }
+
+/** 解答（puzzle.solution）と照らして、その手が間違いか */
+const isWrongMove = (state: GameState, index: number, value: number): boolean =>
+  state.puzzle.solution.charCodeAt(index) - 48 !== value
 
 /** そのマスが問題の初期数字（編集不可）か */
 export const isGiven = (state: GameState, index: number): boolean => state.givens[index] !== 0
@@ -120,8 +158,9 @@ const commit = (state: GameState, next: Partial<Snapshot>): GameState => {
 const inputValue = (state: GameState, index: number, value: number): GameState => {
   const grid = state.grid.slice()
   const notes = state.notes.slice()
+  const removing = grid[index] === value
 
-  if (grid[index] === value) {
+  if (removing) {
     // 同じ数字をもう一度押したら消す
     grid[index] = 0
   } else {
@@ -133,7 +172,12 @@ const inputValue = (state: GameState, index: number, value: number): GameState =
     }
   }
 
-  return commit(state, { grid, notes, eliminated: emptyMasks() })
+  const next = commit(state, { grid, notes, eliminated: emptyMasks() })
+  // 間違えた手は Undo しても記録上は消さない（実際に間違えたことは変わらないため）
+  if (!removing && isWrongMove(state, index, value)) {
+    return { ...next, mistakes: state.mistakes + 1 }
+  }
+  return next
 }
 
 const inputNote = (state: GameState, index: number, value: number): GameState => {
@@ -143,10 +187,38 @@ const inputNote = (state: GameState, index: number, value: number): GameState =>
   return commit(state, { notes })
 }
 
+const eraseAt = (state: GameState, index: number): GameState => {
+  if (state.grid[index] === 0 && state.notes[index] === 0) return state
+  const grid = state.grid.slice()
+  const notes = state.notes.slice()
+  grid[index] = 0
+  notes[index] = 0
+  return commit(state, { grid, notes, eliminated: emptyMasks() })
+}
+
+/** 編集を受け付けない状況か */
+const isLocked = (state: GameState, index: number): boolean =>
+  isGiven(state, index) || state.status === 'solved' || state.paused
+
 export const gameReducer = (state: GameState, action: GameAction): GameState => {
   switch (action.type) {
     case 'select':
       return { ...state, selected: action.index }
+
+    case 'tapCell': {
+      const index = action.index
+      // マス優先、または数字を選んでいないときは、選択するだけ
+      if (state.inputStyle === 'cell' || state.activeDigit === null) {
+        return { ...state, selected: index }
+      }
+      if (isLocked(state, index)) return { ...state, selected: index }
+
+      const selectedState = { ...state, selected: index }
+      if (state.activeDigit === 'erase') return eraseAt(selectedState, index)
+      return state.mode === 'value'
+        ? inputValue(selectedState, index, state.activeDigit)
+        : inputNote(selectedState, index, state.activeDigit)
+    }
 
     case 'setMode':
       return { ...state, mode: action.mode }
@@ -154,12 +226,53 @@ export const gameReducer = (state: GameState, action: GameAction): GameState => 
     case 'toggleMode':
       return { ...state, mode: state.mode === 'value' ? 'note' : 'value' }
 
+    case 'setInputStyle':
+      return {
+        ...state,
+        inputStyle: action.style,
+        // 方式を変えたら選択中の数字は持ち越さない
+        activeDigit: action.style === 'cell' ? null : state.activeDigit,
+      }
+
+    case 'toggleInputStyle': {
+      const style: InputStyle = state.inputStyle === 'cell' ? 'digit' : 'cell'
+      return { ...state, inputStyle: style, activeDigit: null }
+    }
+
+    case 'selectDigit':
+      // 同じものをもう一度押したら選択解除
+      return {
+        ...state,
+        activeDigit: state.activeDigit === action.digit ? null : action.digit,
+      }
+
     case 'toggleCandidates':
       return { ...state, showCandidates: !state.showCandidates }
 
+    case 'fillAllNotes': {
+      if (state.status === 'solved' || state.paused) return state
+      const masks = computeCandidateMasks(state.grid)
+      const notes = state.notes.slice()
+      let changed = false
+      for (let i = 0; i < CELL_COUNT; i++) {
+        if (state.grid[i] !== 0) continue
+        const next = masks[i] & ~state.eliminated[i]
+        if (notes[i] !== next) {
+          notes[i] = next
+          changed = true
+        }
+      }
+      return changed ? commit(state, { notes }) : state
+    }
+
+    case 'clearAllNotes': {
+      if (state.notes.every((n) => n === 0)) return state
+      return commit(state, { notes: emptyMasks() })
+    }
+
     case 'input': {
       const index = state.selected
-      if (index === null || isGiven(state, index) || state.status === 'solved') return state
+      if (index === null || isLocked(state, index)) return state
       return state.mode === 'value'
         ? inputValue(state, index, action.value)
         : inputNote(state, index, action.value)
@@ -167,13 +280,8 @@ export const gameReducer = (state: GameState, action: GameAction): GameState => 
 
     case 'erase': {
       const index = state.selected
-      if (index === null || isGiven(state, index) || state.status === 'solved') return state
-      if (state.grid[index] === 0 && state.notes[index] === 0) return state
-      const grid = state.grid.slice()
-      const notes = state.notes.slice()
-      grid[index] = 0
-      notes[index] = 0
-      return commit(state, { grid, notes, eliminated: emptyMasks() })
+      if (index === null || isLocked(state, index)) return state
+      return eraseAt(state, index)
     }
 
     case 'undo': {
@@ -202,17 +310,30 @@ export const gameReducer = (state: GameState, action: GameAction): GameState => 
 
     case 'restart':
       return {
-        ...createGame(state.puzzle),
+        ...createGame(state.puzzle, state.dailyDate),
+        // 操作の好みはリスタートしても引き継ぐ
         mode: state.mode,
+        inputStyle: state.inputStyle,
         showCandidates: state.showCandidates,
       }
 
     case 'tick':
-      if (state.status === 'solved') return state
+      if (state.status === 'solved' || state.paused) return state
       return { ...state, elapsedMs: state.elapsedMs + action.deltaMs }
 
+    case 'togglePause':
+      if (state.status === 'solved') return state
+      return { ...state, paused: !state.paused }
+
     case 'countHint':
-      return { ...state, hintCount: state.hintCount + 1 }
+      return {
+        ...state,
+        hintCount: state.hintCount + 1,
+        hintTechniques: {
+          ...state.hintTechniques,
+          [action.technique]: (state.hintTechniques[action.technique] ?? 0) + 1,
+        },
+      }
 
     case 'applyHint': {
       const { hint } = action

@@ -45,6 +45,9 @@ const FILE_NAME: Record<TechniqueId, string> = {
   HIDDEN_TRIPLE: 'hidden-triple.json',
   X_WING: 'x-wing.json',
   XY_WING: 'xy-wing.json',
+  XYZ_WING: 'xyz-wing.json',
+  SWORDFISH: 'swordfish.json',
+  JELLYFISH: 'jellyfish.json',
 }
 
 const found = new Map<TechniqueId, Fixture>()
