@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseGrid } from '../sudoku/board/board'
+import { parseGrid, unitIndices } from '../sudoku/board/board'
 import { computeCandidates } from '../sudoku/candidates/candidateEngine'
 import { createGame, gameReducer } from '../sudoku/game/gameState'
 import type { GameAction, GameState } from '../sudoku/game/gameState'
@@ -27,23 +27,70 @@ describe('効果音の選び方', () => {
     expect(soundOf(base, { type: 'tapCell', index })).toBe('select')
   })
 
+  /** 候補が2つ以上あり、ルール上は置けるが不正解の数字を作れるマス */
+  const flexible = (() => {
+    for (let i = 0; i < 81; i++) {
+      if (base.grid[i] !== 0) continue
+      const candidates = computeCandidates(base.grid, i)
+      const wrong = candidates.find((n) => n !== solution[i])
+      if (wrong !== undefined) return { index: i, wrong, candidates }
+    }
+    throw new Error('候補が2つ以上あるマスが見つかりません')
+  })()
+
   it('数字を置いたら置いた音', () => {
-    const selected = run(base, { type: 'select', index })
-    expect(soundOf(selected, { type: 'input', value: solution[index] })).toBe('place')
+    const selected = run(base, { type: 'select', index: flexible.index })
+    expect(soundOf(selected, { type: 'input', value: flexible.wrong })).toBe('place')
   })
 
   it('数字を消したら消した音', () => {
+    // 正解は確定して消せないので、間違えた数字を消す
     const placed = run(
       base,
-      { type: 'select', index },
-      { type: 'input', value: solution[index] },
+      { type: 'select', index: flexible.index },
+      { type: 'input', value: flexible.wrong },
     )
     expect(soundOf(placed, { type: 'erase' })).toBe('erase')
   })
 
   it('メモを書いたらメモの音', () => {
-    const noteMode = run(base, { type: 'select', index }, { type: 'setMode', mode: 'note' })
-    expect(soundOf(noteMode, { type: 'input', value: 3 })).toBe('note')
+    const noteMode = run(
+      base,
+      { type: 'select', index: flexible.index },
+      { type: 'setMode', mode: 'note' },
+    )
+    expect(soundOf(noteMode, { type: 'input', value: flexible.candidates[0] })).toBe('note')
+  })
+
+  it('書けないメモは何も起きないので鳴らさない', () => {
+    const impossible = [1, 2, 3, 4, 5, 6, 7, 8, 9].find(
+      (n) => !flexible.candidates.includes(n),
+    )!
+    const noteMode = run(
+      base,
+      { type: 'select', index: flexible.index },
+      { type: 'setMode', mode: 'note' },
+    )
+    expect(soundOf(noteMode, { type: 'input', value: impossible })).toBeNull()
+  })
+
+  it('ブロックを埋め切ったらブロック完成の音楽', () => {
+    const block = [0, 1, 2, 3, 4, 5, 6, 7, 8].find(
+      (b) => unitIndices({ type: 'box', index: b }).some((i) => base.grid[i] === 0),
+    )!
+    const empties = unitIndices({ type: 'box', index: block }).filter((i) => base.grid[i] === 0)
+    const last = empties.at(-1)!
+    const almost = run(
+      base,
+      ...empties
+        .slice(0, -1)
+        .flatMap((i): GameAction[] => [
+          { type: 'select', index: i },
+          { type: 'input', value: solution[i] },
+        ]),
+      { type: 'select', index: last },
+    )
+    expect(soundOf(almost, { type: 'input', value: solution[last] })).toBe('block')
   })
 
   it('重複を作ったら間違いの音', () => {

@@ -21,6 +21,10 @@ export type CellProps = {
   isPeerBox: boolean
   /** 注目中の数字（選択マスの数字、または数字優先モードで選択中の数字）と同じ */
   isHighlighted: boolean
+  /** 注目中の数字。メモの中の同じ数字を強調するのに使う。無ければ 0 */
+  focusDigit: number
+  /** ブロック完成の演出を始めるまでの遅れ（ミリ秒）。演出しないなら null */
+  celebrateDelay: number | null
   /** 表示する候補（自動候補 or 手書きメモ） */
   candidates: number[]
   /** 手書きメモの候補（自動候補と区別して表示する） */
@@ -79,11 +83,13 @@ function SudokuCellBase(props: CellProps) {
       onClick={() => props.onSelect(index)}
       className={`relative flex aspect-square items-center justify-center border-solid transition-colors select-none ${
         isError ? 'cell-error' : ''
-      }`}
+      } ${props.celebrateDelay !== null ? 'cell-celebrate' : ''}`}
       style={{
         ...borderStyle,
         background: cellBackground(props),
         opacity: props.dimmed ? 0.3 : 1,
+        animationDelay:
+          props.celebrateDelay !== null ? `${props.celebrateDelay}ms` : undefined,
         // 選択中は内側の枠で示す。背景を奪わないので重複やヒントと共存できる
         boxShadow: props.isSelected ? 'inset 0 0 0 3px var(--ring)' : undefined,
         zIndex: props.isSelected ? 1 : undefined,
@@ -106,25 +112,31 @@ function SudokuCellBase(props: CellProps) {
             const shown = candidates.includes(n)
             const focus = isFocusCandidate(hintView, index, n)
             const remove = isRemoveCandidate(hintView, index, n)
+            // 注目中の数字と同じメモは、丸で囲んで目立たせる（ヒントの強調が優先）
+            const matches = shown && !focus && !remove && n === props.focusDigit
             return (
-              <span
-                key={n}
-                className="tabular flex items-center justify-center leading-none"
-                style={{
-                  fontSize: 'clamp(0.5rem, 2vw, 0.7rem)',
-                  color: remove
-                    ? 'var(--hint-remove)'
-                    : focus
-                      ? 'var(--hint-keep)'
-                      : noteSet.has(n)
-                        ? 'var(--input)'
-                        : 'var(--muted)',
-                  fontWeight: focus || remove ? 700 : 500,
-                  textDecoration: remove ? 'line-through' : 'none',
-                  opacity: shown ? 1 : 0,
-                }}
-              >
-                {n}
+              <span key={n} className="flex items-center justify-center">
+                <span
+                  className="tabular flex aspect-square h-[88%] items-center justify-center rounded-full leading-none"
+                  style={{
+                    fontSize: 'clamp(0.5rem, 2vw, 0.7rem)',
+                    color: remove
+                      ? 'var(--hint-remove)'
+                      : focus
+                        ? 'var(--hint-keep)'
+                        : matches
+                          ? 'var(--note-focus-ink)'
+                          : noteSet.has(n)
+                            ? 'var(--input)'
+                            : 'var(--muted)',
+                    background: matches ? 'var(--note-focus)' : undefined,
+                    fontWeight: focus || remove || matches ? 700 : 500,
+                    textDecoration: remove ? 'line-through' : 'none',
+                    opacity: shown ? 1 : 0,
+                  }}
+                >
+                  {n}
+                </span>
               </span>
             )
           })}

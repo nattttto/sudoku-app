@@ -32,6 +32,9 @@ export const soundForTransition = (
   // クリアは他のどの音よりも優先する
   if (next.status === 'solved' && prev.status !== 'solved') return 'complete'
 
+  // ブロックを埋め切ったら、置いた音の代わりにごほうびの音楽
+  if (next.celebration && next.celebration !== prev.celebration) return 'block'
+
   switch (action.type) {
     case 'tapCell':
     case 'input':

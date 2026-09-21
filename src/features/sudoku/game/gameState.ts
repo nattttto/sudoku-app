@@ -12,10 +12,13 @@
 import {
   CELL_COUNT,
   PEERS,
+  boxOf,
+  canPlace,
   findConflicts,
   isSolved,
   parseCellId,
   parseGrid,
+  unitIndices,
 } from '../board/board'
 import { bit, computeCandidateMasks, maskToNumbers } from '../candidates/candidateEngine'
 import type { Grid, Puzzle } from '../board/types'
@@ -29,6 +32,18 @@ export type InputStyle = 'cell' | 'digit'
 export type DigitSelection = number | 'erase' | null
 
 export type GameStatus = 'playing' | 'solved'
+
+/**
+ * 3×3ブロックを正しく埋め切ったときの演出情報。
+ * 演出は一瞬で終わるが、状態として持っておくことで
+ * reducer を純粋なまま「いま何が起きたか」を画面と効果音に伝えられる。
+ */
+export type Celebration = {
+  /** 完成したブロック（0〜8） */
+  block: number
+  /** 最後に数字を置いたマス。演出はここから波のように広がる */
+  origin: number
+}
 
 /** Undo / Redo で戻せる範囲の状態 */
 export type Snapshot = {
@@ -63,6 +78,8 @@ export type GameState = Snapshot & {
   mistakes: number
   /** デイリー数独として遊んでいる場合の日付（YYYY-MM-DD） */
   dailyDate?: string
+  /** 直前にブロックを完成させたときの演出。無ければ null */
+  celebration: Celebration | null
 }
 
 export type GameAction =
@@ -117,15 +134,41 @@ export const createGame = (puzzle: Puzzle, dailyDate?: string): GameState => {
     hintCount: 0,
     hintTechniques: {},
     mistakes: 0,
+    celebration: null,
   }
 }
 
+/** そのマスの正解の数字 */
+const solutionAt = (state: GameState, index: number): number =>
+  state.puzzle.solution.charCodeAt(index) - 48
+
 /** 解答（puzzle.solution）と照らして、その手が間違いか */
 const isWrongMove = (state: GameState, index: number, value: number): boolean =>
-  state.puzzle.solution.charCodeAt(index) - 48 !== value
+  solutionAt(state, index) !== value
 
 /** そのマスが問題の初期数字（編集不可）か */
 export const isGiven = (state: GameState, index: number): boolean => state.givens[index] !== 0
+
+/**
+ * そのマスが確定済みか。
+ * 問題の初期数字に加えて、プレイヤーが正解を入れたマスも確定として扱い、
+ * それ以上は書き換えられないようにする。
+ */
+export const isSettled = (state: GameState, index: number): boolean =>
+  isGiven(state, index) ||
+  (state.grid[index] !== 0 && state.grid[index] === solutionAt(state, index))
+
+/**
+ * そのマスにメモとして書き込めるか。
+ * 同じ行・列・ブロックにすでにある数字はメモできない（ありえない候補になるため）。
+ * すでに書いてあるメモを外す操作は、いつでも許す。
+ */
+export const canAddNote = (state: GameState, index: number, value: number): boolean =>
+  state.grid[index] === 0 && canPlace(state.grid, index, value)
+
+/** そのブロックが正解どおりにすべて埋まっているか */
+const isBlockComplete = (state: GameState, grid: Grid, block: number): boolean =>
+  unitIndices({ type: 'box', index: block }).every((i) => grid[i] === solutionAt(state, i))
 
 /** 重複しているマスの集合 */
 export const conflictsOf = (state: GameState): Set<number> => findConflicts(state.grid)
@@ -173,15 +216,26 @@ const inputValue = (state: GameState, index: number, value: number): GameState =
   }
 
   const next = commit(state, { grid, notes, eliminated: emptyMasks() })
+  if (removing) return next
+
   // 間違えた手は Undo しても記録上は消さない（実際に間違えたことは変わらないため）
-  if (!removing && isWrongMove(state, index, value)) {
+  if (isWrongMove(state, index, value)) {
     return { ...next, mistakes: state.mistakes + 1 }
+  }
+
+  // 正解でブロックが埋まったら演出する。クリアのときはクリアの演出を優先する
+  const block = boxOf(index)
+  if (next.status !== 'solved' && isBlockComplete(state, grid, block)) {
+    return { ...next, celebration: { block, origin: index } }
   }
   return next
 }
 
 const inputNote = (state: GameState, index: number, value: number): GameState => {
   if (state.grid[index] !== 0) return state
+  const adding = (state.notes[index] & bit(value)) === 0
+  // ありえない候補は書かせない。外すほうはいつでもできる
+  if (adding && !canAddNote(state, index, value)) return state
   const notes = state.notes.slice()
   notes[index] ^= bit(value)
   return commit(state, { notes })
@@ -198,7 +252,7 @@ const eraseAt = (state: GameState, index: number): GameState => {
 
 /** 編集を受け付けない状況か */
 const isLocked = (state: GameState, index: number): boolean =>
-  isGiven(state, index) || state.status === 'solved' || state.paused
+  isSettled(state, index) || state.status === 'solved' || state.paused
 
 export const gameReducer = (state: GameState, action: GameAction): GameState => {
   switch (action.type) {
@@ -293,6 +347,7 @@ export const gameReducer = (state: GameState, action: GameAction): GameState => 
         past: state.past.slice(0, -1),
         future: [snapshotOf(state), ...state.future],
         status: isSolved(previous.grid) ? 'solved' : 'playing',
+        celebration: null,
       }
     }
 
@@ -305,6 +360,7 @@ export const gameReducer = (state: GameState, action: GameAction): GameState => 
         past: [...state.past, snapshotOf(state)],
         future: state.future.slice(1),
         status: isSolved(next.grid) ? 'solved' : 'playing',
+        celebration: null,
       }
     }
 

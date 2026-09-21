@@ -18,6 +18,10 @@ type Props = {
   remaining: Record<number, number>
   /** マス優先で、まだマスを選んでいない */
   noCellSelected: boolean
+  /** マス優先で、選んだマスが確定済み（初期数字か正解入力済み） */
+  selectedSettled: boolean
+  /** マス優先のメモ入力で、選んだマスにメモできない数字 */
+  blockedNotes: ReadonlySet<number>
   disabled: boolean
   onSelectDigit: (digit: DigitSelection) => void
   onInput: (value: number) => void
@@ -34,6 +38,8 @@ export function NumberPad({
   activeDigit,
   remaining,
   noCellSelected,
+  selectedSettled,
+  blockedNotes,
   disabled,
   onSelectDigit,
   onInput,
@@ -42,8 +48,8 @@ export function NumberPad({
   onSetInputStyle,
 }: Props) {
   const isDigitFirst = inputStyle === 'digit'
-  // マス優先ではマス未選択だと押しても何も起きないので、その状態を見せる
-  const digitsInert = disabled || (!isDigitFirst && noCellSelected)
+  // マス優先では、マス未選択や確定済みのマスでは押しても何も起きないので、その状態を見せる
+  const digitsInert = disabled || (!isDigitFirst && (noCellSelected || selectedSettled))
 
   const press = (digit: number) => {
     if (isDigitFirst) onSelectDigit(digit)
@@ -108,12 +114,16 @@ export function NumberPad({
           const left = remaining[n] ?? 0
           const isActive = isDigitFirst && activeDigit === n
           const usedUp = left === 0
+          // 同じ行・列・ブロックにすでにある数字はメモできない
+          const blocked = !isDigitFirst && mode === 'note' && blockedNotes.has(n)
+          const isDisabled =
+            digitsInert || blocked || (usedUp && !isDigitFirst && mode === 'value')
           return (
             <button
               key={n}
               type="button"
               onClick={() => press(n)}
-              disabled={digitsInert || (usedUp && !isDigitFirst)}
+              disabled={isDisabled}
               aria-pressed={isDigitFirst ? isActive : undefined}
               aria-label={`${n}（残り${left}個）`}
               className="tabular flex aspect-[4/3] flex-col items-center justify-center rounded-xl border transition-colors disabled:opacity-40"
@@ -122,7 +132,9 @@ export function NumberPad({
                 borderWidth: isActive ? 2 : 1,
                 background: isActive ? 'var(--selected)' : 'var(--surface)',
                 color: mode === 'note' ? 'var(--input)' : 'var(--foreground)',
-                opacity: usedUp ? 0.4 : 1,
+                // インラインで opacity を指定すると disabled の見た目を上書きしてしまうので、
+                // 押せない状態もここでまとめて扱う
+                opacity: isDisabled || usedUp ? 0.35 : 1,
               }}
             >
               <span style={{ fontSize: 'clamp(1.25rem, 5.5vw, 1.6rem)', lineHeight: 1.1 }}>
@@ -167,7 +179,11 @@ export function NumberPad({
               : `マスをタップすると ${activeDigit} が${mode === 'note' ? 'メモに' : ''}入ります`
           : noCellSelected
             ? 'マスを選んでから数字を押してください'
-            : `数字を押すと選択中のマスに${mode === 'note' ? 'メモとして' : ''}入ります`}
+            : selectedSettled
+              ? 'このマスは確定しています'
+              : mode === 'note' && blockedNotes.size > 0
+                ? '同じ行・列・ブロックにある数字はメモできません'
+                : `数字を押すと選択中のマスに${mode === 'note' ? 'メモとして' : ''}入ります`}
       </p>
     </div>
   )

@@ -19,6 +19,7 @@ export type SoundName =
   | 'erase'
   | 'error'
   | 'hint'
+  | 'block'
   | 'complete'
 
 const STORAGE_KEY = 'sudoku:sound'
@@ -163,6 +164,24 @@ const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
     tone(ctx, { from: 840, duration: 0.12, gain: 0.08, delay: 0.09 })
   },
 
+  // ブロック完成。キラッと駆け上がる短いフレーズ
+  // クリアより高く速くして、「途中のごほうび」らしさを出す
+  block: (ctx) => {
+    const notes = [783.99, 1046.5, 1318.51, 1567.98] // ソ・ド・ミ・ソ
+    notes.forEach((freq, i) => {
+      const last = i === notes.length - 1
+      tone(ctx, { from: freq, duration: last ? 0.34 : 0.1, gain: 0.09, delay: i * 0.055 })
+      // 1オクターブ上を薄く重ねて、きらめきを足す
+      tone(ctx, {
+        from: freq * 2,
+        duration: last ? 0.22 : 0.06,
+        gain: 0.025,
+        type: 'triangle',
+        delay: i * 0.055,
+      })
+    })
+  },
+
   // クリア。ドミソドの分散和音
   complete: (ctx) => {
     ;[523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
@@ -172,9 +191,10 @@ const PLAY: Record<SoundName, (ctx: AudioContext) => void> = {
 }
 
 /** 端末が振動に対応していれば、ごく短く震わせて「ポチッ」を補強する */
-const VIBRATION: Partial<Record<SoundName, number>> = {
+const VIBRATION: Partial<Record<SoundName, number | number[]>> = {
   place: 8,
   error: 22,
+  block: [10, 40, 10, 40, 18],
 }
 
 export const playSound = (name: SoundName): void => {
@@ -189,10 +209,10 @@ export const playSound = (name: SoundName): void => {
     }
   }
 
-  const ms = VIBRATION[name]
-  if (ms && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+  const pattern = VIBRATION[name]
+  if (pattern && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
     try {
-      navigator.vibrate(ms)
+      navigator.vibrate(pattern)
     } catch {
       // 非対応端末では何もしない
     }

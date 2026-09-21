@@ -9,6 +9,7 @@ import { CELL_COUNT, boxOf, colOf, rowOf } from '@/features/sudoku/board/board'
 import { maskToNumbers } from '@/features/sudoku/candidates/candidateEngine'
 import type { HintView } from '@/features/sudoku/hints/hintView'
 import type { GameState } from '@/features/sudoku/game/gameState'
+import { BlockCelebration } from './BlockCelebration'
 import { SudokuCell } from './SudokuCell'
 
 type Props = {
@@ -22,6 +23,9 @@ type Props = {
   onSelect: (index: number) => void
 }
 
+/** 演出が完成マスから波のように広がる間隔（ミリ秒） */
+const WAVE_STEP_MS = 70
+
 export function SudokuBoard({
   state,
   autoCandidates,
@@ -30,18 +34,24 @@ export function SudokuBoard({
   hintActive,
   onSelect,
 }: Props) {
-  const selected = state.selected
+  const isDigitFirst = state.inputStyle === 'digit'
+  // 数字優先では「どのマスを選んだか」に意味が無いので、選択の強調は出さない
+  const selected = isDigitFirst ? null : state.selected
 
   /**
    * 盤面で強調する数字。
-   * 数字優先モードで数字を選んでいればそれを、そうでなければ選択マスの数字を使う。
+   * 数字優先では選んでいる数字、マス優先では選択中のマスの数字。
+   * 数字だけでなく、メモの中の同じ数字も強調する。
    */
-  const focusValue =
-    typeof state.activeDigit === 'number'
+  const focusValue = isDigitFirst
+    ? typeof state.activeDigit === 'number'
       ? state.activeDigit
-      : selected !== null
-        ? state.grid[selected]
-        : 0
+      : 0
+    : selected !== null
+      ? state.grid[selected]
+      : 0
+
+  const celebration = state.celebration
 
   const cells = useMemo(() => {
     return Array.from({ length: CELL_COUNT }, (_, index) => {
@@ -63,6 +73,15 @@ export function SudokuBoard({
         related && (rowOf(selected!) === rowOf(index) || colOf(selected!) === colOf(index))
       const isPeerBox = related && !isPeerLine && boxOf(selected!) === boxOf(index)
 
+      // 完成したブロックは、最後に置いたマスからの距離に応じて少しずつ遅らせて光らせる
+      const celebrateDelay =
+        celebration && boxOf(index) === celebration.block
+          ? Math.max(
+              Math.abs(rowOf(index) - rowOf(celebration.origin)),
+              Math.abs(colOf(index) - colOf(celebration.origin)),
+            ) * WAVE_STEP_MS
+          : null
+
       return {
         index,
         value,
@@ -72,21 +91,31 @@ export function SudokuBoard({
         isPeerLine,
         isPeerBox,
         isHighlighted: focusValue !== 0 && value === focusValue && selected !== index,
+        focusDigit: focusValue,
         candidates,
         noteCandidates: notes,
         dimmed: hintActive && !hintView.inScope.has(index),
+        celebrateDelay,
       }
     })
-  }, [state, autoCandidates, conflicts, selected, focusValue, hintActive, hintView])
+  }, [state, autoCandidates, conflicts, selected, focusValue, hintActive, hintView, celebration])
 
   return (
     <div
-      className="grid w-full grid-cols-9 overflow-hidden rounded-md"
+      className="relative grid w-full grid-cols-9 overflow-hidden rounded-md"
       style={{ background: 'var(--surface)' }}
     >
       {cells.map((cell) => (
         <SudokuCell key={cell.index} {...cell} hintView={hintView} onSelect={onSelect} />
       ))}
+      {celebration && (
+        <BlockCelebration
+          // key は「どの完成か」だけで決める。他の操作のたびに作り直すと演出が再生し直されてしまう。
+          // 同じブロックが再び完成するのは Undo で一度 null を経た後だけなので、これで足りる
+          key={`${celebration.block}-${celebration.origin}`}
+          block={celebration.block}
+        />
+      )}
     </div>
   )
 }
